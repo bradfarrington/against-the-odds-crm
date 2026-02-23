@@ -1,0 +1,376 @@
+import { createContext, useContext, useReducer, useEffect, useCallback, useState } from 'react';
+import { useAuth } from './AuthContext';
+import * as api from '../lib/api';
+
+const DataContext = createContext();
+
+// ─── Action types ──────────────────────────────────────────────
+
+const ACTIONS = {
+    // Data loading
+    SET_DATA: 'SET_DATA',
+    // Companies
+    ADD_COMPANY: 'ADD_COMPANY',
+    UPDATE_COMPANY: 'UPDATE_COMPANY',
+    DELETE_COMPANY: 'DELETE_COMPANY',
+    // Contacts
+    ADD_CONTACT: 'ADD_CONTACT',
+    UPDATE_CONTACT: 'UPDATE_CONTACT',
+    DELETE_CONTACT: 'DELETE_CONTACT',
+    // Recovery Seekers
+    ADD_SEEKER: 'ADD_SEEKER',
+    UPDATE_SEEKER: 'UPDATE_SEEKER',
+    DELETE_SEEKER: 'DELETE_SEEKER',
+    ADD_COACHING_SESSION: 'ADD_COACHING_SESSION',
+    // Campaigns
+    ADD_CAMPAIGN: 'ADD_CAMPAIGN',
+    UPDATE_CAMPAIGN: 'UPDATE_CAMPAIGN',
+    DELETE_CAMPAIGN: 'DELETE_CAMPAIGN',
+    // Projects
+    ADD_PROJECT: 'ADD_PROJECT',
+    UPDATE_PROJECT: 'UPDATE_PROJECT',
+    DELETE_PROJECT: 'DELETE_PROJECT',
+    // Tasks
+    ADD_TASK: 'ADD_TASK',
+    UPDATE_TASK: 'UPDATE_TASK',
+    DELETE_TASK: 'DELETE_TASK',
+    // Contracts
+    ADD_CONTRACT: 'ADD_CONTRACT',
+    UPDATE_CONTRACT: 'UPDATE_CONTRACT',
+    DELETE_CONTRACT: 'DELETE_CONTRACT',
+    // Meeting Notes
+    ADD_MEETING_NOTE: 'ADD_MEETING_NOTE',
+    UPDATE_MEETING_NOTE: 'UPDATE_MEETING_NOTE',
+    DELETE_MEETING_NOTE: 'DELETE_MEETING_NOTE',
+    // Prevention Schedule
+    ADD_WORKSHOP: 'ADD_WORKSHOP',
+    UPDATE_WORKSHOP: 'UPDATE_WORKSHOP',
+    DELETE_WORKSHOP: 'DELETE_WORKSHOP',
+    // Invoices
+    ADD_INVOICE: 'ADD_INVOICE',
+    UPDATE_INVOICE: 'UPDATE_INVOICE',
+    DELETE_INVOICE: 'DELETE_INVOICE',
+    // Targets
+    ADD_TARGET: 'ADD_TARGET',
+    UPDATE_TARGET: 'UPDATE_TARGET',
+    DELETE_TARGET: 'DELETE_TARGET',
+    // Templates
+    ADD_TEMPLATE: 'ADD_TEMPLATE',
+    UPDATE_TEMPLATE: 'UPDATE_TEMPLATE',
+    DELETE_TEMPLATE: 'DELETE_TEMPLATE',
+    // Staff
+    ADD_STAFF: 'ADD_STAFF',
+    UPDATE_STAFF: 'UPDATE_STAFF',
+    DELETE_STAFF: 'DELETE_STAFF',
+    // Prevention Resources
+    ADD_PREVENTION_RESOURCE: 'ADD_PREVENTION_RESOURCE',
+    UPDATE_PREVENTION_RESOURCE: 'UPDATE_PREVENTION_RESOURCE',
+    DELETE_PREVENTION_RESOURCE: 'DELETE_PREVENTION_RESOURCE',
+    // Recovery Resources
+    ADD_RECOVERY_RESOURCE: 'ADD_RECOVERY_RESOURCE',
+    UPDATE_RECOVERY_RESOURCE: 'UPDATE_RECOVERY_RESOURCE',
+    DELETE_RECOVERY_RESOURCE: 'DELETE_RECOVERY_RESOURCE',
+};
+
+// ─── Initial empty state ──────────────────────────────────────
+
+const emptyState = {
+    companies: [],
+    contacts: [],
+    recoverySeekers: [],
+    campaigns: [],
+    staff: [],
+    projects: [],
+    tasks: [],
+    contracts: [],
+    meetingNotes: [],
+    preventionSchedule: [],
+    invoices: [],
+    targets: [],
+    templates: [],
+    preventionResources: [],
+    recoveryResources: [],
+};
+
+// ─── Reducer ──────────────────────────────────────────────────
+
+function crudLocal(state, collection, action) {
+    switch (action.crud) {
+        case 'ADD':
+            return { ...state, [collection]: [...state[collection], action.payload] };
+        case 'UPDATE':
+            return {
+                ...state,
+                [collection]: state[collection].map(item =>
+                    item.id === action.payload.id ? { ...item, ...action.payload } : item
+                ),
+            };
+        case 'DELETE':
+            return {
+                ...state,
+                [collection]: state[collection].filter(item => item.id !== action.payload),
+            };
+        default:
+            return state;
+    }
+}
+
+function dataReducer(state, action) {
+    switch (action.type) {
+        case ACTIONS.SET_DATA:
+            return { ...state, ...action.payload };
+
+        // Companies
+        case ACTIONS.ADD_COMPANY: return crudLocal(state, 'companies', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_COMPANY: return crudLocal(state, 'companies', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_COMPANY: return crudLocal(state, 'companies', { crud: 'DELETE', payload: action.payload });
+
+        // Contacts
+        case ACTIONS.ADD_CONTACT: return crudLocal(state, 'contacts', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_CONTACT: return crudLocal(state, 'contacts', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_CONTACT: return crudLocal(state, 'contacts', { crud: 'DELETE', payload: action.payload });
+
+        // Recovery Seekers
+        case ACTIONS.ADD_SEEKER: return crudLocal(state, 'recoverySeekers', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_SEEKER: return crudLocal(state, 'recoverySeekers', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_SEEKER: return crudLocal(state, 'recoverySeekers', { crud: 'DELETE', payload: action.payload });
+        case ACTIONS.ADD_COACHING_SESSION:
+            return {
+                ...state,
+                recoverySeekers: state.recoverySeekers.map(s =>
+                    s.id === action.payload.seekerId
+                        ? { ...s, coachingSessions: [...s.coachingSessions, action.payload.session] }
+                        : s
+                ),
+            };
+
+        // Campaigns
+        case ACTIONS.ADD_CAMPAIGN: return crudLocal(state, 'campaigns', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_CAMPAIGN: return crudLocal(state, 'campaigns', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_CAMPAIGN: return crudLocal(state, 'campaigns', { crud: 'DELETE', payload: action.payload });
+
+        // Projects
+        case ACTIONS.ADD_PROJECT: return crudLocal(state, 'projects', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_PROJECT: return crudLocal(state, 'projects', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_PROJECT: return crudLocal(state, 'projects', { crud: 'DELETE', payload: action.payload });
+
+        // Tasks
+        case ACTIONS.ADD_TASK: return crudLocal(state, 'tasks', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_TASK: return crudLocal(state, 'tasks', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_TASK: return crudLocal(state, 'tasks', { crud: 'DELETE', payload: action.payload });
+
+        // Contracts
+        case ACTIONS.ADD_CONTRACT: return crudLocal(state, 'contracts', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_CONTRACT: return crudLocal(state, 'contracts', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_CONTRACT: return crudLocal(state, 'contracts', { crud: 'DELETE', payload: action.payload });
+
+        // Meeting Notes
+        case ACTIONS.ADD_MEETING_NOTE: return crudLocal(state, 'meetingNotes', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_MEETING_NOTE: return crudLocal(state, 'meetingNotes', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_MEETING_NOTE: return crudLocal(state, 'meetingNotes', { crud: 'DELETE', payload: action.payload });
+
+        // Prevention Schedule
+        case ACTIONS.ADD_WORKSHOP: return crudLocal(state, 'preventionSchedule', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_WORKSHOP: return crudLocal(state, 'preventionSchedule', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_WORKSHOP: return crudLocal(state, 'preventionSchedule', { crud: 'DELETE', payload: action.payload });
+
+        // Invoices
+        case ACTIONS.ADD_INVOICE: return crudLocal(state, 'invoices', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_INVOICE: return crudLocal(state, 'invoices', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_INVOICE: return crudLocal(state, 'invoices', { crud: 'DELETE', payload: action.payload });
+
+        // Targets
+        case ACTIONS.ADD_TARGET: return crudLocal(state, 'targets', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_TARGET: return crudLocal(state, 'targets', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_TARGET: return crudLocal(state, 'targets', { crud: 'DELETE', payload: action.payload });
+
+        // Templates
+        case ACTIONS.ADD_TEMPLATE: return crudLocal(state, 'templates', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_TEMPLATE: return crudLocal(state, 'templates', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_TEMPLATE: return crudLocal(state, 'templates', { crud: 'DELETE', payload: action.payload });
+
+        // Staff
+        case ACTIONS.ADD_STAFF: return crudLocal(state, 'staff', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_STAFF: return crudLocal(state, 'staff', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_STAFF: return crudLocal(state, 'staff', { crud: 'DELETE', payload: action.payload });
+
+        // Prevention Resources
+        case ACTIONS.ADD_PREVENTION_RESOURCE: return crudLocal(state, 'preventionResources', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_PREVENTION_RESOURCE: return crudLocal(state, 'preventionResources', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_PREVENTION_RESOURCE: return crudLocal(state, 'preventionResources', { crud: 'DELETE', payload: action.payload });
+
+        // Recovery Resources
+        case ACTIONS.ADD_RECOVERY_RESOURCE: return crudLocal(state, 'recoveryResources', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_RECOVERY_RESOURCE: return crudLocal(state, 'recoveryResources', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_RECOVERY_RESOURCE: return crudLocal(state, 'recoveryResources', { crud: 'DELETE', payload: action.payload });
+
+        default:
+            return state;
+    }
+}
+
+// ─── Async dispatch wrapper ───────────────────────────────────
+// Maps each action type to its API call so the dispatch stays synchronous
+// for the UI while the API call runs in the background.
+
+const apiMap = {
+    [ACTIONS.ADD_COMPANY]: (p) => api.createCompany(p),
+    [ACTIONS.UPDATE_COMPANY]: (p) => api.modifyCompany(p.id, p),
+    [ACTIONS.DELETE_COMPANY]: (p) => api.removeCompany(p),
+
+    [ACTIONS.ADD_CONTACT]: (p) => api.createContact(p),
+    [ACTIONS.UPDATE_CONTACT]: (p) => api.modifyContact(p.id, p),
+    [ACTIONS.DELETE_CONTACT]: (p) => api.removeContact(p),
+
+    [ACTIONS.ADD_SEEKER]: (p) => api.createSeeker(p),
+    [ACTIONS.UPDATE_SEEKER]: (p) => api.modifySeeker(p.id, p),
+    [ACTIONS.DELETE_SEEKER]: (p) => api.removeSeeker(p),
+    [ACTIONS.ADD_COACHING_SESSION]: (p) => api.createCoachingSession({ seekerId: p.seekerId, ...p.session }),
+
+    [ACTIONS.ADD_CAMPAIGN]: (p) => api.createCampaign(p),
+    [ACTIONS.UPDATE_CAMPAIGN]: (p) => api.modifyCampaign(p.id, p),
+    [ACTIONS.DELETE_CAMPAIGN]: (p) => api.removeCampaign(p),
+
+    [ACTIONS.ADD_PROJECT]: (p) => api.createProject(p),
+    [ACTIONS.UPDATE_PROJECT]: (p) => api.modifyProject(p.id, p),
+    [ACTIONS.DELETE_PROJECT]: (p) => api.removeProject(p),
+
+    [ACTIONS.ADD_TASK]: (p) => api.createTask(p),
+    [ACTIONS.UPDATE_TASK]: (p) => api.modifyTask(p.id, p),
+    [ACTIONS.DELETE_TASK]: (p) => api.removeTask(p),
+
+    [ACTIONS.ADD_CONTRACT]: (p) => api.createContract(p),
+    [ACTIONS.UPDATE_CONTRACT]: (p) => api.modifyContract(p.id, p),
+    [ACTIONS.DELETE_CONTRACT]: (p) => api.removeContract(p),
+
+    [ACTIONS.ADD_MEETING_NOTE]: (p) => api.createMeetingNote(p),
+    [ACTIONS.UPDATE_MEETING_NOTE]: (p) => api.modifyMeetingNote(p.id, p),
+    [ACTIONS.DELETE_MEETING_NOTE]: (p) => api.removeMeetingNote(p),
+
+    [ACTIONS.ADD_WORKSHOP]: (p) => api.createWorkshop(p),
+    [ACTIONS.UPDATE_WORKSHOP]: (p) => api.modifyWorkshop(p.id, p),
+    [ACTIONS.DELETE_WORKSHOP]: (p) => api.removeWorkshop(p),
+
+    [ACTIONS.ADD_INVOICE]: (p) => api.createInvoice(p),
+    [ACTIONS.UPDATE_INVOICE]: (p) => api.modifyInvoice(p.id, p),
+    [ACTIONS.DELETE_INVOICE]: (p) => api.removeInvoice(p),
+
+    [ACTIONS.ADD_TARGET]: (p) => api.createTarget(p),
+    [ACTIONS.UPDATE_TARGET]: (p) => api.modifyTarget(p.id, p),
+    [ACTIONS.DELETE_TARGET]: (p) => api.removeTarget(p),
+
+    [ACTIONS.ADD_TEMPLATE]: (p) => api.createTemplate(p),
+    [ACTIONS.UPDATE_TEMPLATE]: (p) => api.modifyTemplate(p.id, p),
+    [ACTIONS.DELETE_TEMPLATE]: (p) => api.removeTemplate(p),
+
+    [ACTIONS.ADD_STAFF]: (p) => api.createStaffMember(p),
+    [ACTIONS.UPDATE_STAFF]: (p) => api.modifyStaffMember(p.id, p),
+    [ACTIONS.DELETE_STAFF]: (p) => api.removeStaffMember(p),
+
+    [ACTIONS.ADD_PREVENTION_RESOURCE]: (p) => api.createPreventionResource(p),
+    [ACTIONS.UPDATE_PREVENTION_RESOURCE]: (p) => api.modifyPreventionResource(p.id, p),
+    [ACTIONS.DELETE_PREVENTION_RESOURCE]: (p) => api.removePreventionResource(p),
+
+    [ACTIONS.ADD_RECOVERY_RESOURCE]: (p) => api.createRecoveryResource(p),
+    [ACTIONS.UPDATE_RECOVERY_RESOURCE]: (p) => api.modifyRecoveryResource(p.id, p),
+    [ACTIONS.DELETE_RECOVERY_RESOURCE]: (p) => api.removeRecoveryResource(p),
+};
+
+// ─── Provider ──────────────────────────────────────────────────
+
+export function DataProvider({ children }) {
+    const { isAuthenticated } = useAuth();
+    const [state, rawDispatch] = useReducer(dataReducer, emptyState);
+    const [dataLoading, setDataLoading] = useState(true);
+    const [dataError, setDataError] = useState(null);
+
+    // Fetch all data from Supabase on login
+    const loadData = useCallback(async () => {
+        if (!isAuthenticated) {
+            setDataLoading(false);
+            return;
+        }
+        setDataLoading(true);
+        setDataError(null);
+        try {
+            const [
+                companies, contacts, recoverySeekers, campaigns, staff,
+                projects, tasks, contracts, meetingNotes, preventionSchedule,
+                invoices, targets, templates, preventionResources, recoveryResources,
+            ] = await Promise.all([
+                api.fetchCompanies(),
+                api.fetchContacts(),
+                api.fetchRecoverySeekers(),
+                api.fetchCampaigns(),
+                api.fetchStaff(),
+                api.fetchProjects(),
+                api.fetchTasks(),
+                api.fetchContracts(),
+                api.fetchMeetingNotes(),
+                api.fetchPreventionSchedule(),
+                api.fetchInvoices(),
+                api.fetchTargets(),
+                api.fetchTemplates(),
+                api.fetchPreventionResources(),
+                api.fetchRecoveryResources(),
+            ]);
+            rawDispatch({
+                type: ACTIONS.SET_DATA,
+                payload: {
+                    companies, contacts, recoverySeekers, campaigns, staff,
+                    projects, tasks, contracts, meetingNotes, preventionSchedule,
+                    invoices, targets, templates, preventionResources, recoveryResources,
+                },
+            });
+        } catch (err) {
+            console.error('Failed to load data:', err);
+            setDataError(err.message);
+        } finally {
+            setDataLoading(false);
+        }
+    }, [isAuthenticated]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
+
+    // Async-aware dispatch: optimistically updates local state,
+    // then fires the API call. On error, reloads from DB.
+    const dispatch = useCallback(async (action) => {
+        const apiFn = apiMap[action.type];
+        if (!apiFn) {
+            // No API mapping (e.g. SET_DATA) — just dispatch locally
+            rawDispatch(action);
+            return;
+        }
+
+        try {
+            // Call API first to get the record with DB-generated id
+            const result = await apiFn(action.payload);
+            // For ADD actions, use the API-returned data (has DB id)
+            if (action.type.startsWith('ADD_')) {
+                rawDispatch({ type: action.type, payload: result || action.payload });
+            } else {
+                rawDispatch(action);
+            }
+        } catch (err) {
+            console.error(`API error for ${action.type}:`, err);
+            // Reload data to stay in sync
+            loadData();
+        }
+    }, [loadData]);
+
+    return (
+        <DataContext.Provider value={{ state, dispatch, ACTIONS, dataLoading, dataError, reloadData: loadData }}>
+            {children}
+        </DataContext.Provider>
+    );
+}
+
+export function useData() {
+    const context = useContext(DataContext);
+    if (!context) throw new Error('useData must be used within DataProvider');
+    return context;
+}
+
+export { ACTIONS };

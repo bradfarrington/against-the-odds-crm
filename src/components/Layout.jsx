@@ -1,0 +1,170 @@
+import { NavLink, Outlet } from 'react-router-dom';
+import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
+import {
+    LayoutDashboard,
+    Building2,
+    Users,
+    CheckSquare,
+    Columns3,
+    FolderOpen,
+    Receipt,
+    HeartHandshake,
+    FolderKanban,
+    FileText,
+    UsersRound,
+    Settings,
+    LogOut,
+    Loader2,
+} from 'lucide-react';
+
+const navSections = [
+    {
+        items: [
+            { to: '/', icon: <LayoutDashboard />, label: 'Dashboard' },
+        ],
+    },
+    {
+        label: 'Core',
+        items: [
+            { to: '/contacts', icon: <Users />, label: 'Contacts' },
+            { to: '/companies', icon: <Building2 />, label: 'Companies' },
+            { to: '/tasks', icon: <CheckSquare />, label: 'Tasks' },
+        ],
+    },
+    {
+        label: 'Prevention',
+        items: [
+            { to: '/workshop-tracker', icon: <Columns3 />, label: 'Workshop Tracker' },
+            { to: '/prevention/resources', icon: <FolderOpen />, label: 'Resources' },
+            { to: '/prevention/invoices', icon: <Receipt />, label: 'Invoices' },
+        ],
+    },
+    {
+        label: 'Recovery',
+        items: [
+            { to: '/treatment-tracker', icon: <HeartHandshake />, label: 'Treatment Tracker' },
+            { to: '/recovery/resources', icon: <FolderOpen />, label: 'Resources' },
+            { to: '/recovery/invoices', icon: <Receipt />, label: 'Invoices' },
+        ],
+    },
+    {
+        label: 'Operations',
+        items: [
+            { to: '/projects', icon: <FolderKanban />, label: 'Projects' },
+            { to: '/contracts', icon: <FileText />, label: 'Contracts' },
+            { to: '/staff-hub', icon: <UsersRound />, label: 'Staff Hub' },
+        ],
+    },
+];
+
+export default function Layout() {
+    const { theme } = useTheme();
+    const { user, logout } = useAuth();
+    const { state, dataLoading, dataError, reloadData } = useData();
+
+    const staff = state.staff || [];
+    // Try to find the logged-in user's staff record by email
+    const currentStaff = user ? staff.find(s => s.email === user.email) : null;
+
+    const userDisplayName = currentStaff
+        ? `${currentStaff.firstName} ${currentStaff.lastName}`
+        : user?.email?.split('@')[0] || 'User';
+    const userRole = currentStaff?.role || 'Team Member';
+    const userInitials = currentStaff
+        ? `${currentStaff.firstName[0]}${currentStaff.lastName[0]}`
+        : userDisplayName[0]?.toUpperCase() || 'U';
+
+    const handleLogout = async () => {
+        try {
+            await logout();
+        } catch (err) {
+            console.error('Logout failed:', err);
+        }
+    };
+
+    // Show loading state while data is being fetched
+    if (dataLoading) {
+        return (
+            <div className="app-loading">
+                <Loader2 className="app-loading-spinner" />
+                <span>Loading data…</span>
+            </div>
+        );
+    }
+
+    // Show error state if data fetch failed
+    if (dataError) {
+        return (
+            <div className="app-loading">
+                <div style={{ color: 'var(--danger)', marginBottom: 'var(--space-md)', fontWeight: 600 }}>
+                    Failed to load data
+                </div>
+                <div style={{ color: 'var(--text-secondary)', marginBottom: 'var(--space-lg)', fontSize: 13 }}>
+                    {dataError}
+                </div>
+                <button className="btn btn-primary" onClick={reloadData}>Retry</button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="app-layout">
+            <aside className="sidebar">
+                <div className="sidebar-logo">
+                    <img src="/logo.png" alt="Against the Odds" style={{ width: 40, height: 40, borderRadius: 'var(--radius-md)', objectFit: 'contain' }} />
+                </div>
+
+                {/* Logged-in user */}
+                <div className="user-selector">
+                    <div className="user-selector-btn" style={{ cursor: 'default' }}>
+                        <div className="user-avatar" style={{ background: 'var(--primary)' }}>
+                            {userInitials}
+                        </div>
+                        <div className="user-selector-info">
+                            <div className="user-selector-name">{userDisplayName}</div>
+                            <div className="user-selector-role">{userRole}</div>
+                        </div>
+                        <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={handleLogout}
+                            title="Sign out"
+                            style={{ padding: 6, marginLeft: 'auto' }}
+                        >
+                            <LogOut style={{ width: 14, height: 14 }} />
+                        </button>
+                    </div>
+                </div>
+
+                <nav className="sidebar-nav">
+                    {navSections.map((section, i) => (
+                        <div key={section.label || i}>
+                            {section.label && <div className="sidebar-section-label">{section.label}</div>}
+                            {section.items.map(item => (
+                                <NavLink
+                                    key={item.to}
+                                    to={item.to}
+                                    end={item.to === '/'}
+                                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                                >
+                                    {item.icon}
+                                    {item.label}
+                                </NavLink>
+                            ))}
+                        </div>
+                    ))}
+                </nav>
+                <div className="sidebar-footer">
+                    <NavLink to="/settings" className={({ isActive }) => `settings-link ${isActive ? 'active' : ''}`}>
+                        <Settings style={{ width: 18, height: 18 }} />
+                        Settings
+                    </NavLink>
+                </div>
+            </aside>
+            <main className="main-content">
+                <Outlet />
+            </main>
+        </div>
+    );
+}
