@@ -164,11 +164,11 @@ export default function Tasks() {
                         <Search />
                         <input className="search-input" placeholder="Search tasks…" value={search} onChange={e => setSearch(e.target.value)} />
                     </div>
-                    <select className="form-select" style={{ width: 150 }} value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}>
+                    <select className="form-select" style={{ flex: 1 }} value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}>
                         <option value="All">All Team</option>
                         {staff.map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}
                     </select>
-                    <select className="form-select" style={{ width: 130 }} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+                    <select className="form-select" style={{ flex: 1 }} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
                         <option value="All">All Categories</option>
                         {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                         <option value="">Uncategorised</option>
@@ -232,23 +232,67 @@ export default function Tasks() {
                         </div>
                     </div>
                 ) : (
-                    <div className="kanban-board" style={{ gridTemplateColumns: `repeat(${categoryNames.length + (uncategorisedTasks.length > 0 ? 1 : 0)}, minmax(260px, 1fr))` }}>
-                        {categoryNames.map(catName => {
-                            const colTasks = sortByPriority([...tasks.filter(t => t.category === catName)]);
-                            return (
+                    <>
+                        {/* Desktop Kanban Board */}
+                        <div className="kanban-board kanban-desktop" style={{ gridTemplateColumns: `repeat(${categoryNames.length + (uncategorisedTasks.length > 0 ? 1 : 0)}, minmax(260px, 1fr))` }}>
+                            {categoryNames.map(catName => {
+                                const colTasks = sortByPriority([...tasks.filter(t => t.category === catName)]);
+                                return (
+                                    <div
+                                        key={catName}
+                                        className={`kanban-column${dragOverColumn === catName ? ' drag-over' : ''}`}
+                                        onDragOver={(e) => handleDragOver(e, catName)}
+                                        onDragLeave={handleDragLeave}
+                                        onDrop={(e) => handleDrop(e, catName)}
+                                    >
+                                        <div className="kanban-column-header">
+                                            <span>{catName}</span>
+                                            <span className="kanban-count">{colTasks.length}</span>
+                                        </div>
+                                        <div className="kanban-column-body">
+                                            {colTasks.map(t => (
+                                                <div
+                                                    key={t.id}
+                                                    className="kanban-card"
+                                                    draggable
+                                                    onDragStart={(e) => handleDragStart(e, t)}
+                                                    onDragEnd={handleDragEnd}
+                                                    onClick={() => { setEditItem(t); setShowModal(true); }}
+                                                >
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                                                        <span className="kanban-card-title">{t.title}</span>
+                                                        <StatusBadge status={t.priority} map={priorityMap} />
+                                                    </div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                                                        <StatusBadge status={t.status} map={statusMap} />
+                                                    </div>
+                                                    <div className="kanban-card-meta">
+                                                        <span>To: {getStaffName(t.assigneeId)}</span>
+                                                        {t.assignedById && <span>By: {getStaffName(t.assignedById)}</span>}
+                                                        {t.dueDate && <span style={isOverdue(t) ? { color: 'var(--danger)' } : {}}>{new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {colTasks.length === 0 && (
+                                                <div className="kanban-empty">Drop tasks here</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {uncategorisedTasks.length > 0 && (
                                 <div
-                                    key={catName}
-                                    className={`kanban-column${dragOverColumn === catName ? ' drag-over' : ''}`}
-                                    onDragOver={(e) => handleDragOver(e, catName)}
+                                    className={`kanban-column${dragOverColumn === '' ? ' drag-over' : ''}`}
+                                    onDragOver={(e) => handleDragOver(e, '')}
                                     onDragLeave={handleDragLeave}
-                                    onDrop={(e) => handleDrop(e, catName)}
+                                    onDrop={(e) => handleDrop(e, '')}
                                 >
                                     <div className="kanban-column-header">
-                                        <span>{catName}</span>
-                                        <span className="kanban-count">{colTasks.length}</span>
+                                        <span>Uncategorised</span>
+                                        <span className="kanban-count">{uncategorisedTasks.length}</span>
                                     </div>
                                     <div className="kanban-column-body">
-                                        {colTasks.map(t => (
+                                        {sortByPriority([...uncategorisedTasks]).map(t => (
                                             <div
                                                 key={t.id}
                                                 className="kanban-card"
@@ -271,52 +315,46 @@ export default function Tasks() {
                                                 </div>
                                             </div>
                                         ))}
-                                        {colTasks.length === 0 && (
-                                            <div className="kanban-empty">Drop tasks here</div>
-                                        )}
                                     </div>
                                 </div>
-                            );
-                        })}
-                        {uncategorisedTasks.length > 0 && (
-                            <div
-                                className={`kanban-column${dragOverColumn === '' ? ' drag-over' : ''}`}
-                                onDragOver={(e) => handleDragOver(e, '')}
-                                onDragLeave={handleDragLeave}
-                                onDrop={(e) => handleDrop(e, '')}
-                            >
-                                <div className="kanban-column-header">
-                                    <span>Uncategorised</span>
-                                    <span className="kanban-count">{uncategorisedTasks.length}</span>
-                                </div>
-                                <div className="kanban-column-body">
-                                    {sortByPriority([...uncategorisedTasks]).map(t => (
-                                        <div
-                                            key={t.id}
-                                            className="kanban-card"
-                                            draggable
-                                            onDragStart={(e) => handleDragStart(e, t)}
-                                            onDragEnd={handleDragEnd}
-                                            onClick={() => { setEditItem(t); setShowModal(true); }}
-                                        >
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                                                <span className="kanban-card-title">{t.title}</span>
-                                                <StatusBadge status={t.priority} map={priorityMap} />
-                                            </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                                                <StatusBadge status={t.status} map={statusMap} />
-                                            </div>
-                                            <div className="kanban-card-meta">
-                                                <span>To: {getStaffName(t.assigneeId)}</span>
-                                                {t.assignedById && <span>By: {getStaffName(t.assignedById)}</span>}
-                                                {t.dueDate && <span style={isOverdue(t) ? { color: 'var(--danger)' } : {}}>{new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>}
-                                            </div>
+                            )}
+                        </div>
+
+                        {/* Mobile Grouped List View */}
+                        <div className="kanban-mobile-list">
+                            {[...categoryNames, ...(uncategorisedTasks.length > 0 ? [''] : [])].map(catName => {
+                                const colTasks = sortByPriority([...tasks.filter(t => catName === '' ? (!t.category || !categoryNames.includes(t.category)) : t.category === catName)]);
+                                if (colTasks.length === 0) return null;
+                                const label = catName || 'Uncategorised';
+                                return (
+                                    <div key={catName} style={{ marginBottom: 'var(--space-lg)' }}>
+                                        <div className="kanban-mobile-section-header">
+                                            <span style={{ fontWeight: 600, fontSize: 13 }}>{label}</span>
+                                            <span className="kanban-count">{colTasks.length}</span>
                                         </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                                        {colTasks.map(t => (
+                                            <div key={t.id} className="kanban-mobile-card" onClick={() => { setEditItem(t); setShowModal(true); }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                                                    <span style={{ fontWeight: 600, fontSize: 14, flex: 1, textDecoration: t.status === 'Done' ? 'line-through' : 'none', opacity: t.status === 'Done' ? 0.6 : 1 }}>{t.title}</span>
+                                                    <StatusBadge status={t.priority} map={priorityMap} />
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+                                                    <StatusBadge status={t.status} map={statusMap} />
+                                                    <span style={{ fontSize: 11, color: isOverdue(t) ? 'var(--danger)' : 'var(--text-muted)' }}>
+                                                        {t.dueDate ? new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}
+                                                        {isOverdue(t) && ' ⚠'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                );
+                            })}
+                            {tasks.length === 0 && (
+                                <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-xl)' }}>No tasks found</div>
+                            )}
+                        </div>
+                    </>
                 )}
             </div>
 

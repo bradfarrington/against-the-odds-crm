@@ -54,7 +54,7 @@ export default function RecoveryResources() {
                         <Search />
                         <input className="search-input" placeholder="Search resources…" value={search} onChange={e => setSearch(e.target.value)} />
                     </div>
-                    <select className="form-select" style={{ width: 160 }} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+                    <select className="form-select" style={{ flex: 1 }} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
                         <option>All</option>
                         {categories.map(c => <option key={c}>{c}</option>)}
                     </select>

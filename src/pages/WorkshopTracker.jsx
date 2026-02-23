@@ -188,7 +188,8 @@ export default function WorkshopTracker() {
                 </div>
             </div>
             <div className="page-body">
-                <div className="kanban-board" style={{ gridTemplateColumns: `repeat(${STAGES.length}, minmax(240px, 1fr))` }}>
+                {/* Desktop Kanban Board */}
+                <div className="kanban-board kanban-desktop" style={{ gridTemplateColumns: `repeat(${STAGES.length}, minmax(240px, 1fr))` }}>
                     {STAGES.map(stage => {
                         const items = workshops.filter(w => getStage(w) === stage.key);
                         return (
@@ -222,7 +223,6 @@ export default function WorkshopTracker() {
                                                 </div>
                                             )}
                                             <div className="kanban-card-title">{w.title}</div>
-
                                             {getCompanyName(w.companyId) && (
                                                 <div className="kanban-card-detail">
                                                     <Building2 style={{ width: 12, height: 12, flexShrink: 0 }} />
@@ -235,7 +235,6 @@ export default function WorkshopTracker() {
                                                     <span>{getContactName(w.contactId)}</span>
                                                 </div>
                                             )}
-
                                             <div className="kanban-card-meta">
                                                 <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                                     <Users style={{ width: 12, height: 12 }} />
@@ -258,7 +257,55 @@ export default function WorkshopTracker() {
                         );
                     })}
                 </div>
+
+                {/* Mobile List View */}
+                <div className="kanban-mobile-list">
+                    {STAGES.map(stage => {
+                        const items = workshops.filter(w => getStage(w) === stage.key);
+                        if (items.length === 0) return null;
+                        return (
+                            <div key={stage.key} style={{ marginBottom: 'var(--space-lg)' }}>
+                                <div className="kanban-mobile-section-header">
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: stage.color, flexShrink: 0 }} />
+                                        <span style={{ fontWeight: 600, fontSize: 13 }}>{stage.label}</span>
+                                    </div>
+                                    <span className="kanban-count">{items.length}</span>
+                                </div>
+                                {items.map(w => (
+                                    <div key={w.id} className="kanban-mobile-card" onClick={() => openModal(w)}>
+                                        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{w.title}</div>
+                                        {getCompanyName(w.companyId) && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', marginBottom: 2 }}>
+                                                <Building2 style={{ width: 11, height: 11 }} />{getCompanyName(w.companyId)}
+                                            </div>
+                                        )}
+                                        {getContactName(w.contactId) && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', marginBottom: 2 }}>
+                                                <User style={{ width: 11, height: 11 }} />{getContactName(w.contactId)}
+                                            </div>
+                                        )}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                                            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
+                                                <Users style={{ width: 11, height: 11 }} />{getStaffName(w.facilitatorId)}
+                                            </span>
+                                            {w.value && (
+                                                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: 2 }}>
+                                                    <PoundSterling style={{ width: 11, height: 11 }} />{parseFloat(w.value).toLocaleString()}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        );
+                    })}
+                    {workshops.length === 0 && (
+                        <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-xl)' }}>No workshops found</div>
+                    )}
+                </div>
             </div>
+
 
             {/* Add/Edit Workshop Modal */}
             <Modal isOpen={showModal} onClose={closeModal} title={editItem ? 'Edit Workshop' : 'New Workshop'}>

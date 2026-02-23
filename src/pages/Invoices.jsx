@@ -67,7 +67,7 @@ export default function Invoices({ category }) {
                         <Search />
                         <input className="search-input" placeholder="Search invoices…" value={search} onChange={e => setSearch(e.target.value)} />
                     </div>
-                    <select className="form-select" style={{ width: 140 }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+                    <select className="form-select" style={{ flex: 1 }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
                         <option>All</option>
                         <option>Draft</option>
                         <option>Sent</option>
@@ -80,22 +80,22 @@ export default function Invoices({ category }) {
                 </div>
             </div>
             <div className="page-body">
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-md)', marginBottom: 'var(--space-xl)' }}>
+                <div className="stats-grid" style={{ marginBottom: 'var(--space-xl)' }}>
                     <div className="stat-card" style={{ '--stat-accent': 'var(--primary)' }}>
                         <div className="stat-card-label">Total Invoiced</div>
-                        <div className="stat-card-value">£{totalInvoiced.toLocaleString()}</div>
+                        <div className="stat-card-value" style={{ fontSize: 22, textAlign: 'center' }}>£{totalInvoiced.toLocaleString()}</div>
                     </div>
                     <div className="stat-card" style={{ '--stat-accent': 'var(--success)' }}>
                         <div className="stat-card-label">Paid</div>
-                        <div className="stat-card-value">£{totalPaid.toLocaleString()}</div>
+                        <div className="stat-card-value" style={{ fontSize: 22, textAlign: 'center' }}>£{totalPaid.toLocaleString()}</div>
                     </div>
                     <div className="stat-card" style={{ '--stat-accent': 'var(--warning)' }}>
                         <div className="stat-card-label">Outstanding</div>
-                        <div className="stat-card-value">£{totalOutstanding.toLocaleString()}</div>
+                        <div className="stat-card-value" style={{ fontSize: 22, textAlign: 'center' }}>£{totalOutstanding.toLocaleString()}</div>
                     </div>
                     <div className="stat-card" style={{ '--stat-accent': 'var(--text-muted)' }}>
                         <div className="stat-card-label">Draft</div>
-                        <div className="stat-card-value">£{totalDraft.toLocaleString()}</div>
+                        <div className="stat-card-value" style={{ fontSize: 22, textAlign: 'center' }}>£{totalDraft.toLocaleString()}</div>
                     </div>
                 </div>
                 <div className="card">

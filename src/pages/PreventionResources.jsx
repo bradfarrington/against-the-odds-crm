@@ -54,7 +54,7 @@ export default function PreventionResources() {
                         <Search />
                         <input className="search-input" placeholder="Search resources…" value={search} onChange={e => setSearch(e.target.value)} />
                     </div>
-                    <select className="form-select" style={{ width: 160 }} value={filterWorkshop} onChange={e => setFilterWorkshop(e.target.value)}>
+                    <select className="form-select" style={{ flex: 1 }} value={filterWorkshop} onChange={e => setFilterWorkshop(e.target.value)}>
                         <option>All</option>
                         {workshopTypes.map(t => <option key={t}>{t}</option>)}
                     </select>

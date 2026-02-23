@@ -81,14 +81,14 @@ export default function Contracts() {
                         <Search />
                         <input className="search-input" placeholder="Search contracts…" value={search} onChange={e => setSearch(e.target.value)} />
                     </div>
-                    <select className="form-select" style={{ width: 140 }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+                    <select className="form-select" style={{ flex: 1 }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
                         <option>All</option>
                         <option>Active</option>
                         <option>Pending</option>
                         <option>Expired</option>
                         <option>Renewed</option>
                     </select>
-                    <select className="form-select" style={{ width: 150 }} value={filterPartnership} onChange={e => setFilterPartnership(e.target.value)}>
+                    <select className="form-select" style={{ flex: 1 }} value={filterPartnership} onChange={e => setFilterPartnership(e.target.value)}>
                         <option value="All">All Types</option>
                         <option>Prevention</option>
                         <option>Recovery</option>
@@ -101,22 +101,22 @@ export default function Contracts() {
                 </div>
             </div>
             <div className="page-body">
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-md)', marginBottom: 'var(--space-xl)' }}>
+                <div className="stats-grid" style={{ marginBottom: 'var(--space-xl)' }}>
                     <div className="stat-card" style={{ '--stat-accent': 'var(--primary)' }}>
                         <div className="stat-card-label">Total Contracts</div>
-                        <div className="stat-card-value">{(state.contracts || []).length}</div>
+                        <div className="stat-card-value" style={{ fontSize: 22, textAlign: 'center' }}>{(state.contracts || []).length}</div>
                     </div>
                     <div className="stat-card" style={{ '--stat-accent': 'var(--success)' }}>
                         <div className="stat-card-label">Active Contracts</div>
-                        <div className="stat-card-value">{activeCount}</div>
+                        <div className="stat-card-value" style={{ fontSize: 22, textAlign: 'center' }}>{activeCount}</div>
                     </div>
                     <div className="stat-card" style={{ '--stat-accent': 'var(--info)' }}>
                         <div className="stat-card-label">Active Value</div>
-                        <div className="stat-card-value">£{activeValue.toLocaleString()}</div>
+                        <div className="stat-card-value" style={{ fontSize: 22, textAlign: 'center' }}>£{activeValue.toLocaleString()}</div>
                     </div>
                     <div className="stat-card" style={{ '--stat-accent': 'var(--warning)' }}>
                         <div className="stat-card-label">Total Value</div>
-                        <div className="stat-card-value">£{totalValue.toLocaleString()}</div>
+                        <div className="stat-card-value" style={{ fontSize: 22, textAlign: 'center' }}>£{totalValue.toLocaleString()}</div>
                     </div>
                 </div>
                 <div className="card">

@@ -69,7 +69,7 @@ export default function Contacts() {
                     <div className="page-header-subtitle">Manage contacts across all companies and organisations</div>
                 </div>
                 <div className="page-header-actions">
-                    <select className="form-select" style={{ width: 200, padding: '8px 12px', fontSize: 13 }} value={filterCompany} onChange={e => setFilterCompany(e.target.value)}>
+                    <select className="form-select" style={{ flex: 1 }} value={filterCompany} onChange={e => setFilterCompany(e.target.value)}>
                         <option value="">All Companies</option>
                         {state.companies.map(c => (
                             <option key={c.id} value={c.id}>{c.name}</option>

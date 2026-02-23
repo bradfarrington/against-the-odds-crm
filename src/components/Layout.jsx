@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -18,6 +19,8 @@ import {
     Settings,
     LogOut,
     Loader2,
+    Menu,
+    X,
 } from 'lucide-react';
 
 const navSections = [
@@ -63,6 +66,7 @@ const navSections = [
 ];
 
 export default function Layout() {
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const { theme } = useTheme();
     const { user, logout } = useAuth();
     const { state, dataLoading, dataError, reloadData } = useData();
@@ -114,9 +118,30 @@ export default function Layout() {
 
     return (
         <div className="app-layout">
-            <aside className="sidebar">
-                <div className="sidebar-logo">
-                    <img src="/logo.png" alt="Against the Odds" style={{ width: 40, height: 40, borderRadius: 'var(--radius-md)', objectFit: 'contain' }} />
+            {/* Mobile Header */}
+            <div className="mobile-header">
+                <div className="mobile-header-logo">
+                    <img src="/logo.png" alt="Against the Odds" style={{ width: 32, height: 32, borderRadius: 'var(--radius-sm)', objectFit: 'contain' }} />
+                    <span className="mobile-header-title">Against the Odds</span>
+                </div>
+                <button className="btn btn-ghost btn-icon" onClick={() => setIsSidebarOpen(true)}>
+                    <Menu style={{ width: 24, height: 24 }} />
+                </button>
+            </div>
+
+            {/* Sidebar Overlay for Mobile */}
+            {isSidebarOpen && (
+                <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)} />
+            )}
+
+            <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
+                <div className="sidebar-logo-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: 'var(--space-md)' }}>
+                    <div className="sidebar-logo">
+                        <img src="/logo.png" alt="Against the Odds" style={{ width: 40, height: 40, borderRadius: 'var(--radius-md)', objectFit: 'contain' }} />
+                    </div>
+                    <button className="btn btn-ghost btn-icon mobile-close-btn" onClick={() => setIsSidebarOpen(false)} style={{ display: 'none' }}>
+                        <X style={{ width: 24, height: 24 }} />
+                    </button>
                 </div>
 
                 {/* Logged-in user */}
@@ -150,6 +175,7 @@ export default function Layout() {
                                     to={item.to}
                                     end={item.to === '/'}
                                     className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                                    onClick={() => setIsSidebarOpen(false)}
                                 >
                                     {item.icon}
                                     {item.label}
@@ -159,7 +185,7 @@ export default function Layout() {
                     ))}
                 </nav>
                 <div className="sidebar-footer">
-                    <NavLink to="/settings" className={({ isActive }) => `settings-link ${isActive ? 'active' : ''}`}>
+                    <NavLink to="/settings" className={({ isActive }) => `settings-link ${isActive ? 'active' : ''}`} onClick={() => setIsSidebarOpen(false)}>
                         <Settings style={{ width: 18, height: 18 }} />
                         Settings
                     </NavLink>

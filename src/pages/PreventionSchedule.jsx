@@ -74,7 +74,7 @@ export default function PreventionSchedule() {
                         <Search />
                         <input className="search-input" placeholder="Search workshops…" value={search} onChange={e => setSearch(e.target.value)} />
                     </div>
-                    <select className="form-select" style={{ width: 140 }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+                    <select className="form-select" style={{ flex: 1 }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
                         <option>All</option>
                         <option>Scheduled</option>
                         <option>Completed</option>

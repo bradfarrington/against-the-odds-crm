@@ -74,7 +74,7 @@ export default function MeetingNotes() {
                         <Search />
                         <input className="search-input" placeholder="Search meetings…" value={search} onChange={e => setSearch(e.target.value)} />
                     </div>
-                    <select className="form-select" style={{ width: 160 }} value={filterType} onChange={e => setFilterType(e.target.value)}>
+                    <select className="form-select" style={{ flex: 1 }} value={filterType} onChange={e => setFilterType(e.target.value)}>
                         <option>All</option>
                         <option>Face to Face</option>
                         <option>Remote</option>

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -37,7 +38,9 @@ const workshopStatusMap = { Scheduled: 'info', Completed: 'success', Cancelled: 
 /* ═══════════════════════════════════════
    ADMIN DASHBOARD
    ═══════════════════════════════════════ */
-function AdminDashboard({ state, navigate }) {
+function AdminDashboard({ state, user, navigate }) {
+    const [viewMode, setViewMode] = useState('overview');
+
     const workshops = state.preventionSchedule || [];
     const seekers = state.recoverySeekers || [];
     const invoices = state.invoices || [];
@@ -85,170 +88,285 @@ function AdminDashboard({ state, navigate }) {
         <>
             <div className="page-header">
                 <div className="page-header-left">
-                    <h1>Admin Dashboard</h1>
-                    <div className="page-header-subtitle">Organisation-wide overview of Against the Odds</div>
+                    <h1>{viewMode === 'overview' ? 'Admin Dashboard' : `Welcome back, ${user?.firstName || 'Admin'}`}</h1>
+                    <div className="page-header-subtitle">
+                        {viewMode === 'overview' ? 'Organisation-wide overview of Against the Odds' : 'Your admin area — projects & tasks'}
+                    </div>
+                </div>
+                <div className="page-header-actions" style={{ display: 'flex', background: 'var(--bg-secondary)', padding: '4px', borderRadius: 'var(--radius-lg)', gap: '4px' }}>
+                    <button
+                        className={`btn btn-sm ${viewMode === 'overview' ? 'btn-primary' : 'btn-ghost'}`}
+                        onClick={() => setViewMode('overview')}
+                    >
+                        Company Overview
+                    </button>
+                    <button
+                        className={`btn btn-sm ${viewMode === 'my-area' ? 'btn-primary' : 'btn-ghost'}`}
+                        onClick={() => setViewMode('my-area')}
+                    >
+                        My Area
+                    </button>
                 </div>
             </div>
-            <div className="page-body">
-                {/* Prevention & Recovery side-by-side stats */}
-                <div className="grid-2" style={{ marginBottom: 'var(--space-xl)' }}>
-                    {/* Prevention */}
-                    <div className="card">
-                        <div className="card-header">
-                            <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-                                <Columns3 style={{ width: 18, height: 18, color: 'var(--warning)' }} /> Prevention
-                            </h3>
-                            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/workshop-tracker')}>View All <ArrowRight style={{ width: 14, height: 14 }} /></button>
-                        </div>
-                        <div className="card-body">
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)' }}>
-                                <div className="mini-stat">
-                                    <div className="mini-stat-value" style={{ color: 'var(--info)' }}>{scheduledWorkshops}</div>
-                                    <div className="mini-stat-label">Scheduled</div>
+            {viewMode === 'overview' ? (
+                <div className="page-body">
+                    {/* Prevention & Recovery side-by-side stats */}
+                    <div className="grid-2" style={{ marginBottom: 'var(--space-xl)' }}>
+                        {/* Prevention */}
+                        <div className="card">
+                            <div className="card-header">
+                                <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                                    <Columns3 style={{ width: 18, height: 18, color: 'var(--warning)' }} /> Prevention
+                                </h3>
+                                <button className="btn btn-ghost btn-sm" onClick={() => navigate('/workshop-tracker')}>View All <ArrowRight style={{ width: 14, height: 14 }} /></button>
+                            </div>
+                            <div className="card-body">
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)' }}>
+                                    <div className="mini-stat">
+                                        <div className="mini-stat-value" style={{ color: 'var(--info)' }}>{scheduledWorkshops}</div>
+                                        <div className="mini-stat-label">Scheduled</div>
+                                    </div>
+                                    <div className="mini-stat">
+                                        <div className="mini-stat-value" style={{ color: 'var(--success)' }}>{completedWorkshops}</div>
+                                        <div className="mini-stat-label">Completed</div>
+                                    </div>
+                                    <div className="mini-stat">
+                                        <div className="mini-stat-value" style={{ color: 'var(--primary)' }}>{totalAttendees}</div>
+                                        <div className="mini-stat-label">People Reached</div>
+                                    </div>
                                 </div>
-                                <div className="mini-stat">
-                                    <div className="mini-stat-value" style={{ color: 'var(--success)' }}>{completedWorkshops}</div>
-                                    <div className="mini-stat-label">Completed</div>
-                                </div>
-                                <div className="mini-stat">
-                                    <div className="mini-stat-value" style={{ color: 'var(--primary)' }}>{totalAttendees}</div>
-                                    <div className="mini-stat-label">People Reached</div>
+                                <div style={{ height: 180 }}>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={workshopChartData}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                                            <XAxis dataKey="month" stroke="var(--text-muted)" fontSize={12} />
+                                            <YAxis stroke="var(--text-muted)" fontSize={12} />
+                                            <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, color: 'var(--text-primary)' }} />
+                                            <Bar dataKey="completed" fill="var(--success)" radius={[4, 4, 0, 0]} name="Completed" />
+                                            <Bar dataKey="scheduled" fill="var(--info)" radius={[4, 4, 0, 0]} name="Scheduled" />
+                                        </BarChart>
+                                    </ResponsiveContainer>
                                 </div>
                             </div>
-                            <div style={{ height: 180 }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={workshopChartData}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                                        <XAxis dataKey="month" stroke="var(--text-muted)" fontSize={12} />
-                                        <YAxis stroke="var(--text-muted)" fontSize={12} />
-                                        <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, color: 'var(--text-primary)' }} />
-                                        <Bar dataKey="completed" fill="var(--success)" radius={[4, 4, 0, 0]} name="Completed" />
-                                        <Bar dataKey="scheduled" fill="var(--info)" radius={[4, 4, 0, 0]} name="Scheduled" />
-                                    </BarChart>
-                                </ResponsiveContainer>
+                        </div>
+
+                        {/* Recovery */}
+                        <div className="card">
+                            <div className="card-header">
+                                <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                                    <HeartHandshake style={{ width: 18, height: 18, color: 'var(--success)' }} /> Recovery
+                                </h3>
+                                <button className="btn btn-ghost btn-sm" onClick={() => navigate('/treatment-tracker')}>View All <ArrowRight style={{ width: 14, height: 14 }} /></button>
+                            </div>
+                            <div className="card-body">
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)' }}>
+                                    <div className="mini-stat">
+                                        <div className="mini-stat-value" style={{ color: 'var(--success)' }}>{activeSeekers}</div>
+                                        <div className="mini-stat-label">Active Seekers</div>
+                                    </div>
+                                    <div className="mini-stat">
+                                        <div className="mini-stat-value" style={{ color: 'var(--primary)' }}>{completedRecovery}</div>
+                                        <div className="mini-stat-label">Completed</div>
+                                    </div>
+                                    <div className="mini-stat">
+                                        <div className="mini-stat-value" style={{ color: 'var(--info)' }}>{totalSessions}</div>
+                                        <div className="mini-stat-label">Sessions</div>
+                                    </div>
+                                </div>
+                                <div style={{ height: 180 }}>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <AreaChart data={recoveryChartData}>
+                                            <defs>
+                                                <linearGradient id="seekerGrad" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="0%" stopColor="var(--success)" stopOpacity={0.3} />
+                                                    <stop offset="100%" stopColor="var(--success)" stopOpacity={0} />
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                                            <XAxis dataKey="month" stroke="var(--text-muted)" fontSize={12} />
+                                            <YAxis stroke="var(--text-muted)" fontSize={12} />
+                                            <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, color: 'var(--text-primary)' }} />
+                                            <Area type="monotone" dataKey="seekers" stroke="var(--success)" strokeWidth={2} fill="url(#seekerGrad)" name="Seekers" />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Recovery */}
-                    <div className="card">
-                        <div className="card-header">
-                            <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-                                <HeartHandshake style={{ width: 18, height: 18, color: 'var(--success)' }} /> Recovery
-                            </h3>
-                            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/treatment-tracker')}>View All <ArrowRight style={{ width: 14, height: 14 }} /></button>
-                        </div>
-                        <div className="card-body">
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)' }}>
-                                <div className="mini-stat">
-                                    <div className="mini-stat-value" style={{ color: 'var(--success)' }}>{activeSeekers}</div>
-                                    <div className="mini-stat-label">Active Seekers</div>
-                                </div>
-                                <div className="mini-stat">
-                                    <div className="mini-stat-value" style={{ color: 'var(--primary)' }}>{completedRecovery}</div>
-                                    <div className="mini-stat-label">Completed</div>
-                                </div>
-                                <div className="mini-stat">
-                                    <div className="mini-stat-value" style={{ color: 'var(--info)' }}>{totalSessions}</div>
-                                    <div className="mini-stat-label">Sessions</div>
-                                </div>
-                            </div>
-                            <div style={{ height: 180 }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={recoveryChartData}>
-                                        <defs>
-                                            <linearGradient id="seekerGrad" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="0%" stopColor="var(--success)" stopOpacity={0.3} />
-                                                <stop offset="100%" stopColor="var(--success)" stopOpacity={0} />
-                                            </linearGradient>
-                                        </defs>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                                        <XAxis dataKey="month" stroke="var(--text-muted)" fontSize={12} />
-                                        <YAxis stroke="var(--text-muted)" fontSize={12} />
-                                        <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, color: 'var(--text-primary)' }} />
-                                        <Area type="monotone" dataKey="seekers" stroke="var(--success)" strokeWidth={2} fill="url(#seekerGrad)" name="Seekers" />
-                                    </AreaChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
+                    {/* Financial Overview */}
+                    <div className="stats-grid" style={{ marginBottom: 'var(--space-xl)' }}>
+                        <StatCard icon={<Receipt />} value={`£${totalInvoiced.toLocaleString()}`} label="Total Invoiced" accent="var(--primary)" className="stagger-1" />
+                        <StatCard icon={<TrendingUp />} value={`£${totalPaid.toLocaleString()}`} label="Paid" accent="var(--success)" className="stagger-2" />
+                        <StatCard icon={<Clock />} value={`£${totalOutstanding.toLocaleString()}`} label="Outstanding" accent="var(--warning)" className="stagger-3" />
+                        <StatCard icon={<CheckSquare />} value={openTasks} label={`Open Tasks (${urgentTasks} urgent)`} accent="var(--info)" className="stagger-4" />
                     </div>
-                </div>
 
-                {/* Financial Overview */}
-                <div className="stats-grid" style={{ marginBottom: 'var(--space-xl)' }}>
-                    <StatCard icon={<Receipt />} value={`£${totalInvoiced.toLocaleString()}`} label="Total Invoiced" accent="var(--primary)" className="stagger-1" />
-                    <StatCard icon={<TrendingUp />} value={`£${totalPaid.toLocaleString()}`} label="Paid" accent="var(--success)" className="stagger-2" />
-                    <StatCard icon={<Clock />} value={`£${totalOutstanding.toLocaleString()}`} label="Outstanding" accent="var(--warning)" className="stagger-3" />
-                    <StatCard icon={<CheckSquare />} value={openTasks} label={`Open Tasks (${urgentTasks} urgent)`} accent="var(--info)" className="stagger-4" />
-                </div>
+                    {/* Staff Overview & Overdue Tasks */}
+                    <div className="grid-2">
+                        {/* Staff Activity */}
+                        <div className="card">
+                            <div className="card-header"><h3>Staff Activity</h3></div>
+                            <div className="card-body">
+                                <div className="data-table-wrapper">
+                                    <table className="data-table">
+                                        <thead>
+                                            <tr><th>Staff</th><th>Department</th><th>Open Tasks</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {staff.filter(s => s.status === 'Active').map(s => {
+                                                const myTasks = tasks.filter(t => t.assigneeId === s.id && t.status !== 'Done').length;
+                                                return (
+                                                    <tr key={s.id}>
+                                                        <td className="table-cell-main">{s.firstName} {s.lastName}</td>
+                                                        <td><StatusBadge status={s.department} map={{ Prevention: 'warning', Recovery: 'success', Leadership: 'primary', Operations: 'info' }} /></td>
+                                                        <td className="table-cell-main">{myTasks}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
 
-                {/* Staff Overview & Overdue Tasks */}
-                <div className="grid-2">
-                    {/* Staff Activity */}
-                    <div className="card">
-                        <div className="card-header"><h3>Staff Activity</h3></div>
-                        <div className="card-body">
-                            <div className="data-table-wrapper">
-                                <table className="data-table">
-                                    <thead>
-                                        <tr><th>Staff</th><th>Department</th><th>Open Tasks</th></tr>
-                                    </thead>
-                                    <tbody>
-                                        {staff.filter(s => s.status === 'Active').map(s => {
-                                            const myTasks = tasks.filter(t => t.assigneeId === s.id && t.status !== 'Done').length;
+                        {/* Overdue / Urgent Items */}
+                        <div className="card">
+                            <div className="card-header"><h3>Urgent & Overdue</h3></div>
+                            <div className="card-body">
+                                {tasks.filter(t => (t.priority === 'Urgent' || t.priority === 'High') && t.status !== 'Done').length === 0 && invoices.filter(i => i.status === 'Overdue').length === 0 ? (
+                                    <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-xl)' }}>All clear — no urgent items 🎉</div>
+                                ) : (
+                                    <div className="activity-list">
+                                        {invoices.filter(i => i.status === 'Overdue').map(inv => (
+                                            <div key={inv.id} className="activity-item" style={{ cursor: 'pointer' }} onClick={() => navigate('/prevention/invoices')}>
+                                                <div className="activity-icon" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}><Receipt style={{ width: 16, height: 16 }} /></div>
+                                                <div className="activity-content">
+                                                    <div className="activity-text"><strong>{inv.invoiceNumber}</strong> — £{inv.amount.toLocaleString()} overdue</div>
+                                                    <div className="activity-time">Due {new Date(inv.dateDue).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {tasks.filter(t => (t.priority === 'Urgent' || t.priority === 'High') && t.status !== 'Done').map(t => {
+                                            const assignee = staff.find(s => s.id === t.assigneeId);
+                                            const assigner = staff.find(s => s.id === t.assignedById);
                                             return (
-                                                <tr key={s.id}>
-                                                    <td className="table-cell-main">{s.firstName} {s.lastName}</td>
-                                                    <td><StatusBadge status={s.department} map={{ Prevention: 'warning', Recovery: 'success', Leadership: 'primary', Operations: 'info' }} /></td>
-                                                    <td className="table-cell-main">{myTasks}</td>
-                                                </tr>
+                                                <div key={t.id} className="activity-item" style={{ cursor: 'pointer' }} onClick={() => navigate('/tasks')}>
+                                                    <div className="activity-icon" style={{ background: t.priority === 'Urgent' ? 'var(--danger-bg)' : 'var(--warning-bg)', color: t.priority === 'Urgent' ? 'var(--danger)' : 'var(--warning)' }}>
+                                                        <AlertCircle style={{ width: 16, height: 16 }} />
+                                                    </div>
+                                                    <div className="activity-content">
+                                                        <div className="activity-text"><strong>{t.title}</strong></div>
+                                                        <div className="activity-time">{assignee ? `${assignee.firstName} ${assignee.lastName}` : '—'}{assigner ? ` • By: ${assigner.firstName} ${assigner.lastName}` : ''} • Due {new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
+                                                    </div>
+                                                </div>
                                             );
                                         })}
-                                    </tbody>
-                                </table>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
+                </div>
+            ) : (
+                <AdminMyArea state={state} user={user} navigate={navigate} />
+            )}
+        </>
+    );
+}
 
-                    {/* Overdue / Urgent Items */}
-                    <div className="card">
-                        <div className="card-header"><h3>Urgent & Overdue</h3></div>
-                        <div className="card-body">
-                            {tasks.filter(t => (t.priority === 'Urgent' || t.priority === 'High') && t.status !== 'Done').length === 0 && invoices.filter(i => i.status === 'Overdue').length === 0 ? (
-                                <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-xl)' }}>All clear — no urgent items 🎉</div>
-                            ) : (
-                                <div className="activity-list">
-                                    {invoices.filter(i => i.status === 'Overdue').map(inv => (
-                                        <div key={inv.id} className="activity-item" style={{ cursor: 'pointer' }} onClick={() => navigate('/prevention/invoices')}>
-                                            <div className="activity-icon" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}><Receipt style={{ width: 16, height: 16 }} /></div>
-                                            <div className="activity-content">
-                                                <div className="activity-text"><strong>{inv.invoiceNumber}</strong> — £{inv.amount.toLocaleString()} overdue</div>
-                                                <div className="activity-time">Due {new Date(inv.dateDue).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
-                                            </div>
+function AdminMyArea({ state, user, navigate }) {
+    const tasks = (state.tasks || []).filter(t => t.assigneeId === user?.id && t.status !== 'Done');
+    const staff = state.staff || [];
+    const getStaffName = (id) => { const s = staff.find(s => s.id === id); return s ? `${s.firstName} ${s.lastName}` : ''; };
+
+    const myProjects = (state.projects || []).filter(p => p.leadId === user?.id && p.status !== 'Completed');
+
+    const overdueTasks = tasks.filter(t => new Date(t.dueDate) < new Date());
+    const upcomingTasks = tasks.filter(t => new Date(t.dueDate) >= new Date()).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+
+    return (
+        <div className="page-body">
+            {/* Quick Stats */}
+            <div className="stats-grid" style={{ marginBottom: 'var(--space-xl)' }}>
+                <StatCard icon={<CheckSquare />} value={myProjects.length} label="Active Projects" accent="var(--primary)" className="stagger-1" />
+                <StatCard icon={<AlertCircle />} value={tasks.length} label="Outstanding Tasks" accent={overdueTasks.length > 0 ? 'var(--danger)' : 'var(--info)'} className="stagger-2" />
+                <StatCard icon={<Clock />} value={overdueTasks.length} label="Overdue Tasks" accent={overdueTasks.length > 0 ? 'var(--danger)' : 'var(--success)'} className="stagger-3" />
+            </div>
+
+            <div className="grid-2">
+                {/* My Projects */}
+                <div className="card">
+                    <div className="card-header">
+                        <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                            <Columns3 style={{ width: 18, height: 18, color: 'var(--primary)' }} /> My Projects
+                        </h3>
+                    </div>
+                    <div className="card-body">
+                        {myProjects.length === 0 ? (
+                            <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-xl)' }}>No active projects assigned</div>
+                        ) : (
+                            <div className="activity-list">
+                                {myProjects.map(p => (
+                                    <div key={p.id} className="activity-item" style={{ cursor: 'pointer' }} onClick={() => navigate('/projects')}>
+                                        <div className="activity-icon" style={{ background: 'var(--primary-bg)', color: 'var(--primary)' }}>
+                                            <Columns3 style={{ width: 16, height: 16 }} />
                                         </div>
-                                    ))}
-                                    {tasks.filter(t => (t.priority === 'Urgent' || t.priority === 'High') && t.status !== 'Done').map(t => {
-                                        const assignee = staff.find(s => s.id === t.assigneeId);
-                                        const assigner = staff.find(s => s.id === t.assignedById);
-                                        return (
-                                            <div key={t.id} className="activity-item" style={{ cursor: 'pointer' }} onClick={() => navigate('/tasks')}>
-                                                <div className="activity-icon" style={{ background: t.priority === 'Urgent' ? 'var(--danger-bg)' : 'var(--warning-bg)', color: t.priority === 'Urgent' ? 'var(--danger)' : 'var(--warning)' }}>
-                                                    <AlertCircle style={{ width: 16, height: 16 }} />
-                                                </div>
-                                                <div className="activity-content">
-                                                    <div className="activity-text"><strong>{t.title}</strong></div>
-                                                    <div className="activity-time">{assignee ? `${assignee.firstName} ${assignee.lastName}` : '—'}{assigner ? ` • By: ${assigner.firstName} ${assigner.lastName}` : ''} • Due {new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
+                                        <div className="activity-content">
+                                            <div className="activity-text"><strong>{p.name}</strong></div>
+                                            <div className="activity-time">{p.status}</div>
+                                        </div>
+                                        <StatusBadge status={p.type} map={{ Awareness: 'primary', Recovery: 'success', Internal: 'info' }} />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* My Tasks */}
+                <div className="card">
+                    <div className="card-header">
+                        <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                            <CheckSquare style={{ width: 18, height: 18, color: 'var(--info)' }} /> My Tasks
+                        </h3>
+                        <button className="btn btn-ghost btn-sm" onClick={() => navigate('/tasks')}>View All <ArrowRight style={{ width: 14, height: 14 }} /></button>
+                    </div>
+                    <div className="card-body">
+                        {tasks.length === 0 ? (
+                            <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-xl)' }}>All tasks complete 🎉</div>
+                        ) : (
+                            <div className="activity-list">
+                                {overdueTasks.map(t => (
+                                    <div key={t.id} className="activity-item" style={{ cursor: 'pointer' }} onClick={() => navigate('/tasks')}>
+                                        <div className="activity-icon" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>
+                                            <AlertCircle style={{ width: 16, height: 16 }} />
+                                        </div>
+                                        <div className="activity-content">
+                                            <div className="activity-text"><strong>{t.title}</strong></div>
+                                            <div className="activity-time">Overdue — was due {new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}{t.assignedById ? ` • By: ${getStaffName(t.assignedById)}` : ''}</div>
+                                        </div>
+                                        <StatusBadge status={t.priority} map={taskPriorityMap} />
+                                    </div>
+                                ))}
+                                {upcomingTasks.map(t => (
+                                    <div key={t.id} className="activity-item" style={{ cursor: 'pointer' }} onClick={() => navigate('/tasks')}>
+                                        <div className="activity-icon" style={{ background: 'var(--info-bg)', color: 'var(--info)' }}>
+                                            <CheckSquare style={{ width: 16, height: 16 }} />
+                                        </div>
+                                        <div className="activity-content">
+                                            <div className="activity-text"><strong>{t.title}</strong></div>
+                                            <div className="activity-time">Due {new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} • {t.status}{t.assignedById ? ` • By: ${getStaffName(t.assignedById)}` : ''}</div>
+                                        </div>
+                                        <StatusBadge status={t.priority} map={taskPriorityMap} />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
-        </>
+        </div>
     );
 }
 
@@ -502,7 +620,7 @@ export default function Dashboard() {
     const staffUser = authUser ? (state.staff || []).find(s => s.email === authUser.email) : null;
 
     if (!staffUser || staffUser.dashboardRole === 'admin') {
-        return <AdminDashboard state={state} navigate={navigate} />;
+        return <AdminDashboard state={state} user={staffUser} navigate={navigate} />;
     }
 
     if (staffUser.dashboardRole === 'prevention') {
@@ -514,6 +632,6 @@ export default function Dashboard() {
     }
 
     // Fallback
-    return <AdminDashboard state={state} navigate={navigate} />;
+    return <AdminDashboard state={state} user={staffUser} navigate={navigate} />;
 }
 

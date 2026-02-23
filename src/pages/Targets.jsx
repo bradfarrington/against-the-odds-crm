@@ -48,7 +48,7 @@ export default function Targets() {
                     <div className="page-header-subtitle">KPIs and goals tracking</div>
                 </div>
                 <div className="page-header-actions">
-                    <select className="form-select" style={{ width: 160 }} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+                    <select className="form-select" style={{ flex: 1 }} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
                         <option>All</option>
                         {categories.map(c => <option key={c}>{c}</option>)}
                     </select>

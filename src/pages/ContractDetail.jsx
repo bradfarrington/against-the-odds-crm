@@ -88,13 +88,13 @@ export default function ContractDetail() {
         <>
             {/* Header */}
             <div className="page-header">
-                <div className="page-header-left" style={{ flexDirection: 'row', alignItems: 'center', gap: 'var(--space-md)' }}>
-                    <button className="btn btn-ghost" onClick={() => navigate('/contracts')}>
-                        <ArrowLeft size={18} />
+                <div className="page-header-left detail-header-left" style={{ flexDirection: 'row', alignItems: 'center', gap: 'var(--space-md)' }}>
+                    <button className="btn btn-ghost" onClick={() => navigate('/contracts')} style={{ padding: 0, margin: '-8px 0 0 -8px', width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <ArrowLeft className="detail-back-icon" />
                     </button>
                     <div>
-                        <h1 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-                            <FileText size={22} style={{ color: 'var(--primary)' }} />
+                        <h1 className="detail-title" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                            <FileText size={22} style={{ color: 'var(--primary)', flexShrink: 0 }} />
                             {contract.title}
                         </h1>
                         <div className="page-header-subtitle" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
@@ -110,35 +110,37 @@ export default function ContractDetail() {
                         </div>
                     </div>
                 </div>
-                <div className="page-header-actions">
+                <div className="page-header-actions" style={{ width: '100%' }}>
                     <StatusBadge status={contract.status} map={statusMap} />
-                    <button className="btn btn-secondary" onClick={handleOpenEdit}>
-                        <Edit2 size={15} /> Edit
-                    </button>
-                    <button className="btn btn-ghost" onClick={handleDelete} style={{ color: 'var(--danger)' }}>
-                        <Trash2 size={15} />
-                    </button>
+                    <div className="detail-actions-right">
+                        <button className="btn btn-secondary" onClick={handleOpenEdit}>
+                            <Edit2 size={15} /> Edit
+                        </button>
+                        <button className="btn btn-ghost" onClick={handleDelete} style={{ color: 'var(--danger)' }}>
+                            <Trash2 size={15} />
+                        </button>
+                    </div>
                 </div>
             </div>
 
             <div className="page-body">
                 {/* Quick stats row */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-md)', marginBottom: 'var(--space-xl)' }}>
+                <div className="stats-grid" style={{ marginBottom: 'var(--space-xl)' }}>
                     <div className="stat-card" style={{ '--stat-accent': 'var(--primary)' }}>
                         <div className="stat-card-label">Contract Value</div>
-                        <div className="stat-card-value">{contract.value ? `£${contract.value.toLocaleString()}` : '£0'}</div>
+                        <div className="stat-card-value" style={{ fontSize: 22, textAlign: 'center' }}>{contract.value ? `£${contract.value.toLocaleString()}` : '£0'}</div>
                     </div>
                     <div className="stat-card" style={{ '--stat-accent': 'var(--success)' }}>
                         <div className="stat-card-label">Start Date</div>
-                        <div className="stat-card-value">{formatShortDate(contract.startDate)}</div>
+                        <div className="stat-card-value" style={{ fontSize: 22, textAlign: 'center' }}>{formatShortDate(contract.startDate)}</div>
                     </div>
                     <div className="stat-card" style={{ '--stat-accent': 'var(--warning)' }}>
                         <div className="stat-card-label">End Date</div>
-                        <div className="stat-card-value">{formatShortDate(contract.endDate)}</div>
+                        <div className="stat-card-value" style={{ fontSize: 22, textAlign: 'center' }}>{formatShortDate(contract.endDate)}</div>
                     </div>
                     <div className="stat-card" style={{ '--stat-accent': remaining !== null && remaining < 30 ? 'var(--danger)' : 'var(--info)' }}>
                         <div className="stat-card-label">Days Remaining</div>
-                        <div className="stat-card-value">{remaining !== null ? (remaining > 0 ? remaining : 'Expired') : '—'}</div>
+                        <div className="stat-card-value" style={{ fontSize: 22, textAlign: 'center' }}>{remaining !== null ? (remaining > 0 ? remaining : 'Expired') : '—'}</div>
                     </div>
                 </div>
 

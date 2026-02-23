@@ -173,7 +173,8 @@ export default function RecoverySeekers() {
             </div>
 
             <div className="page-body">
-                <div className="kanban-board" style={{ gridTemplateColumns: `repeat(${currentStages.length}, minmax(280px, 1fr))` }}>
+                {/* Desktop Kanban Board */}
+                <div className="kanban-board kanban-desktop" style={{ gridTemplateColumns: `repeat(${currentStages.length}, minmax(280px, 1fr))` }}>
                     {currentStages.map(stage => {
                         const items = filtered.filter(s => getStage(s) === stage.key);
                         return (
@@ -220,7 +221,6 @@ export default function RecoverySeekers() {
                                                     <Edit2 size={14} />
                                                 </button>
                                             </div>
-
                                             <div style={{ marginTop: 'var(--space-sm)', fontSize: 12 }}>
                                                 {s.referralSource && (
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -252,6 +252,54 @@ export default function RecoverySeekers() {
                             </div>
                         );
                     })}
+                </div>
+
+                {/* Mobile List View */}
+                <div className="kanban-mobile-list">
+                    {currentStages.map(stage => {
+                        const items = filtered.filter(s => getStage(s) === stage.key);
+                        if (items.length === 0) return null;
+                        return (
+                            <div key={stage.key} style={{ marginBottom: 'var(--space-lg)' }}>
+                                <div className="kanban-mobile-section-header">
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: stage.color, flexShrink: 0 }} />
+                                        <span style={{ fontWeight: 600, fontSize: 13 }}>{stage.label}</span>
+                                    </div>
+                                    <span className="kanban-count">{items.length}</span>
+                                </div>
+                                {items.map(s => (
+                                    <div key={s.id} className="kanban-mobile-card" onClick={() => navigate(`/recovery-seekers/${s.id}`)}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <div style={{ fontWeight: 600, fontSize: 14 }}>{s.firstName} {s.lastName}</div>
+                                                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{s.gender || 'Unknown'} · {s.dateOfBirth || 'No DOB'}</div>
+                                            </div>
+                                            <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, background: `${getRiskColor(s.riskLevel)}22`, color: getRiskColor(s.riskLevel), fontSize: 11, fontWeight: 600 }}>
+                                                {s.riskLevel} Risk
+                                            </span>
+                                        </div>
+                                        {s.referralSource && (
+                                            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 }}>
+                                                Referral: <strong>{s.referralSource}</strong>
+                                            </div>
+                                        )}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                                            <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                <HeartHandshake size={11} /> {s.coachingSessions?.length || 0} sessions
+                                            </span>
+                                            <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); openModal(s); }}>
+                                                <Edit2 size={13} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        );
+                    })}
+                    {filtered.length === 0 && (
+                        <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-xl)' }}>No records found</div>
+                    )}
                 </div>
             </div>
 
