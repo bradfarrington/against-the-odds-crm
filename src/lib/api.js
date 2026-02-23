@@ -112,11 +112,47 @@ export const createStaffMember = (d) => insertRow('staff', d);
 export const modifyStaffMember = (id, d) => updateRow('staff', id, d);
 export const removeStaffMember = (id) => deleteRow('staff', id);
 
-// Projects
-export const fetchProjects = () => fetchAll('projects');
-export const createProject = (d) => insertRow('projects', d);
-export const modifyProject = (id, d) => updateRow('projects', id, d);
+// Projects (with project_staff junction)
+export async function fetchProjects() {
+    const projects = await fetchAll('projects');
+    const { data: ps } = await supabase.from('project_staff').select('*');
+    return projects.map(p => ({
+        ...p,
+        staffIds: (ps || []).filter(r => r.project_id === p.id).map(r => r.staff_id),
+    }));
+}
+
+export async function createProject(d) {
+    const { staffIds = [], ...rest } = d;
+    const project = await insertRow('projects', rest);
+    if (staffIds.length) {
+        await supabase.from('project_staff').insert(
+            staffIds.map(sid => ({ project_id: project.id, staff_id: sid }))
+        );
+    }
+    return { ...project, staffIds };
+}
+
+export async function modifyProject(id, d) {
+    const { staffIds, ...rest } = d;
+    const project = await updateRow('projects', id, rest);
+    if (staffIds !== undefined) {
+        await supabase.from('project_staff').delete().eq('project_id', id);
+        if (staffIds.length) {
+            await supabase.from('project_staff').insert(
+                staffIds.map(sid => ({ project_id: id, staff_id: sid }))
+            );
+        }
+    }
+    return { ...project, staffIds: staffIds ?? [] };
+}
+
 export const removeProject = (id) => deleteRow('projects', id);
+
+export const addProjectStaffMember = (projectId, staffId) =>
+    supabase.from('project_staff').insert({ project_id: projectId, staff_id: staffId });
+export const removeProjectStaffMember = (projectId, staffId) =>
+    supabase.from('project_staff').delete().eq('project_id', projectId).eq('staff_id', staffId);
 
 // Tasks
 export const fetchTasks = () => fetchAll('tasks');

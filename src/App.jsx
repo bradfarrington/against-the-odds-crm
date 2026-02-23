@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import Companies from './pages/Companies';
 import CompanyDetail from './pages/CompanyDetail';
 import Contacts from './pages/Contacts';
+import ContactDetail from './pages/ContactDetail';
 import RecoverySeekers from './pages/RecoverySeekers';
 import SeekerDetail from './pages/SeekerDetail';
 import Tasks from './pages/Tasks';
@@ -16,6 +17,7 @@ import PreventionResources from './pages/PreventionResources';
 import RecoveryResources from './pages/RecoveryResources';
 import Invoices from './pages/Invoices';
 import Projects from './pages/Projects';
+import ProjectDetail from './pages/ProjectDetail';
 import Contracts from './pages/Contracts';
 import StaffHub from './pages/StaffHub';
 import Settings from './pages/Settings';
@@ -50,6 +52,7 @@ function AppRoutes() {
           <Route index element={<Dashboard />} />
           {/* Core */}
           <Route path="contacts" element={<Contacts />} />
+          <Route path="contacts/:id" element={<ContactDetail />} />
           <Route path="companies" element={<Companies />} />
           <Route path="companies/:id" element={<CompanyDetail />} />
           <Route path="tasks" element={<Tasks />} />
@@ -63,6 +66,7 @@ function AppRoutes() {
           <Route path="recovery/invoices" element={<Invoices category="Recovery" />} />
           {/* Operations */}
           <Route path="projects" element={<Projects />} />
+          <Route path="projects/:id" element={<ProjectDetail />} />
           <Route path="contracts" element={<Contracts />} />
           <Route path="staff-hub" element={<StaffHub />} />
           {/* Settings */}

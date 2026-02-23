@@ -1,18 +1,22 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useData, ACTIONS } from '../context/DataContext';
-import { Users, Plus, Mail, Phone, Building2 } from 'lucide-react';
+import { Users, Plus, Mail, Phone, Building2, Edit2, Trash2 } from 'lucide-react';
 import SearchBar from '../components/SearchBar';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
 
 export default function Contacts() {
     const { state, dispatch } = useData();
+    const navigate = useNavigate();
     const [search, setSearch] = useState('');
     const [filterCompany, setFilterCompany] = useState('');
     const [showModal, setShowModal] = useState(false);
     const [form, setForm] = useState({
         firstName: '', lastName: '', role: '', email: '', phone: '', companyId: '', status: 'Active', notes: ''
     });
+    const [editingContact, setEditingContact] = useState(null);
+    const [editForm, setEditForm] = useState({});
 
     const getCompanyName = (companyId) => {
         const company = state.companies.find(c => c.id === companyId);
@@ -28,6 +32,25 @@ export default function Contacts() {
         const matchesCompany = !filterCompany || c.companyId === filterCompany;
         return matchesSearch && matchesCompany;
     });
+
+    const handleOpenEdit = (contact, e) => {
+        e.stopPropagation();
+        setEditingContact(contact);
+        setEditForm({ firstName: contact.firstName, lastName: contact.lastName, role: contact.role || '', email: contact.email || '', phone: contact.phone || '', companyId: contact.companyId || '', status: contact.status || 'Active', notes: contact.notes || '' });
+    };
+
+    const handleEditSubmit = (e) => {
+        e.preventDefault();
+        dispatch({ type: ACTIONS.UPDATE_CONTACT, payload: { ...editingContact, ...editForm } });
+        setEditingContact(null);
+    };
+
+    const handleDelete = (contactId, e) => {
+        e.stopPropagation();
+        if (confirm('Are you sure you want to delete this contact?')) {
+            dispatch({ type: ACTIONS.DELETE_CONTACT, payload: contactId });
+        }
+    };
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -71,11 +94,12 @@ export default function Contacts() {
                                     <th>Email</th>
                                     <th>Phone</th>
                                     <th>Status</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {filtered.map(contact => (
-                                    <tr key={contact.id}>
+                                    <tr key={contact.id} onClick={() => navigate(`/contacts/${contact.id}`)}>
                                         <td>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
                                                 <div style={{
@@ -104,6 +128,14 @@ export default function Contacts() {
                                         </td>
                                         <td className="table-cell-secondary">{contact.phone}</td>
                                         <td><StatusBadge status={contact.status} /></td>
+                                        <td onClick={e => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
+                                            <button className="btn btn-ghost btn-sm" onClick={e => handleOpenEdit(contact, e)} title="Edit">
+                                                <Edit2 size={14} />
+                                            </button>
+                                            <button className="btn btn-ghost btn-sm" onClick={e => handleDelete(contact.id, e)} title="Delete">
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </td>
                                     </tr>
                                 ))}
                                 {filtered.length === 0 && (
@@ -122,6 +154,59 @@ export default function Contacts() {
                     </div>
                 </div>
             </div>
+
+            <Modal isOpen={!!editingContact} onClose={() => setEditingContact(null)} title="Edit Contact">
+                <form onSubmit={handleEditSubmit}>
+                    <div className="modal-body">
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label className="form-label">First Name *</label>
+                                <input className="form-input" required value={editForm.firstName || ''} onChange={e => setEditForm(prev => ({ ...prev, firstName: e.target.value }))} />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Last Name *</label>
+                                <input className="form-input" required value={editForm.lastName || ''} onChange={e => setEditForm(prev => ({ ...prev, lastName: e.target.value }))} />
+                            </div>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Company</label>
+                            <select className="form-select" value={editForm.companyId || ''} onChange={e => setEditForm(prev => ({ ...prev, companyId: e.target.value }))}>
+                                <option value="">Select company...</option>
+                                {state.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Role</label>
+                            <input className="form-input" value={editForm.role || ''} onChange={e => setEditForm(prev => ({ ...prev, role: e.target.value }))} placeholder="e.g. Wellbeing Lead" />
+                        </div>
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label className="form-label">Email</label>
+                                <input className="form-input" type="email" value={editForm.email || ''} onChange={e => setEditForm(prev => ({ ...prev, email: e.target.value }))} />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Phone</label>
+                                <input className="form-input" value={editForm.phone || ''} onChange={e => setEditForm(prev => ({ ...prev, phone: e.target.value }))} />
+                            </div>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Status</label>
+                            <select className="form-select" value={editForm.status || 'Active'} onChange={e => setEditForm(prev => ({ ...prev, status: e.target.value }))}>
+                                <option>Active</option>
+                                <option>Inactive</option>
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Notes</label>
+                            <textarea className="form-textarea" value={editForm.notes || ''} onChange={e => setEditForm(prev => ({ ...prev, notes: e.target.value }))} />
+                        </div>
+                    </div>
+                    <div className="modal-footer">
+                        <button type="button" className="btn btn-secondary" onClick={() => setEditingContact(null)}>Cancel</button>
+                        <button type="submit" className="btn btn-primary">Save Changes</button>
+                    </div>
+                </form>
+            </Modal>
 
             <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Add Contact">
                 <form onSubmit={handleSubmit}>

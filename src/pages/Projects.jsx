@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
-import { Plus, Search, FolderKanban, X } from 'lucide-react';
+import { Plus, Search, FolderKanban, X, Edit2 } from 'lucide-react';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 
@@ -9,6 +10,7 @@ const typeMap = { Awareness: 'primary', Recovery: 'danger', Internal: 'neutral' 
 
 export default function Projects() {
     const { state, dispatch, ACTIONS } = useData();
+    const navigate = useNavigate();
     const [search, setSearch] = useState('');
     const [filterStatus, setFilterStatus] = useState('All');
     const [showModal, setShowModal] = useState(false);
@@ -93,7 +95,7 @@ export default function Projects() {
                             </thead>
                             <tbody>
                                 {projects.map(p => (
-                                    <tr key={p.id} onClick={() => { setEditItem(p); setShowModal(true); }}>
+                                    <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate('/projects/' + p.id)}>
                                         <td>
                                             <div className="table-cell-main"><FolderKanban style={{ width: 14, height: 14, display: 'inline', marginRight: 6, verticalAlign: -2, color: 'var(--primary)' }} />{p.name}</div>
                                         </td>
@@ -104,6 +106,7 @@ export default function Projects() {
                                         <td className="table-cell-secondary">{p.startDate && p.endDate ? `${new Date(p.startDate).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })} — ${new Date(p.endDate).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}` : '—'}</td>
                                         <td className="table-cell-secondary">{p.budget ? `£${p.budget.toLocaleString()}` : '—'}</td>
                                         <td onClick={e => e.stopPropagation()}>
+                                            <button className="btn btn-ghost btn-sm" onClick={() => { setEditItem(p); setShowModal(true); }}><Edit2 style={{ width: 14, height: 14 }} /></button>
                                             <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(p.id)}><X style={{ width: 14, height: 14 }} /></button>
                                         </td>
                                     </tr>

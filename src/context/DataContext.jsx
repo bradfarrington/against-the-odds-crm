@@ -30,6 +30,8 @@ const ACTIONS = {
     ADD_PROJECT: 'ADD_PROJECT',
     UPDATE_PROJECT: 'UPDATE_PROJECT',
     DELETE_PROJECT: 'DELETE_PROJECT',
+    ADD_PROJECT_STAFF: 'ADD_PROJECT_STAFF',
+    REMOVE_PROJECT_STAFF: 'REMOVE_PROJECT_STAFF',
     // Tasks
     ADD_TASK: 'ADD_TASK',
     UPDATE_TASK: 'UPDATE_TASK',
@@ -153,6 +155,24 @@ function dataReducer(state, action) {
         case ACTIONS.ADD_PROJECT: return crudLocal(state, 'projects', { crud: 'ADD', payload: action.payload });
         case ACTIONS.UPDATE_PROJECT: return crudLocal(state, 'projects', { crud: 'UPDATE', payload: action.payload });
         case ACTIONS.DELETE_PROJECT: return crudLocal(state, 'projects', { crud: 'DELETE', payload: action.payload });
+        case ACTIONS.ADD_PROJECT_STAFF:
+            return {
+                ...state,
+                projects: state.projects.map(p =>
+                    p.id === action.payload.projectId
+                        ? { ...p, staffIds: [...(p.staffIds || []), action.payload.staffId] }
+                        : p
+                ),
+            };
+        case ACTIONS.REMOVE_PROJECT_STAFF:
+            return {
+                ...state,
+                projects: state.projects.map(p =>
+                    p.id === action.payload.projectId
+                        ? { ...p, staffIds: (p.staffIds || []).filter(id => id !== action.payload.staffId) }
+                        : p
+                ),
+            };
 
         // Tasks
         case ACTIONS.ADD_TASK: return crudLocal(state, 'tasks', { crud: 'ADD', payload: action.payload });
@@ -234,6 +254,8 @@ const apiMap = {
     [ACTIONS.ADD_PROJECT]: (p) => api.createProject(p),
     [ACTIONS.UPDATE_PROJECT]: (p) => api.modifyProject(p.id, p),
     [ACTIONS.DELETE_PROJECT]: (p) => api.removeProject(p),
+    [ACTIONS.ADD_PROJECT_STAFF]: (p) => api.addProjectStaffMember(p.projectId, p.staffId),
+    [ACTIONS.REMOVE_PROJECT_STAFF]: (p) => api.removeProjectStaffMember(p.projectId, p.staffId),
 
     [ACTIONS.ADD_TASK]: (p) => api.createTask(p),
     [ACTIONS.UPDATE_TASK]: (p) => api.modifyTask(p.id, p),

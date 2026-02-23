@@ -37,6 +37,7 @@ export default function Tasks() {
         const data = Object.fromEntries(fd);
         if (!data.projectId) data.projectId = null;
         if (!data.assigneeId) data.assigneeId = null;
+        if (!data.assignedById) data.assignedById = null;
         if (editItem) {
             dispatch({ type: ACTIONS.UPDATE_TASK, payload: { id: editItem.id, ...data } });
         } else {
@@ -96,6 +97,7 @@ export default function Tasks() {
                                         <th>Priority</th>
                                         <th>Status</th>
                                         <th>Assigned To</th>
+                                        <th>Assigned By</th>
                                         <th>Project</th>
                                         <th>Due Date</th>
                                         <th></th>
@@ -114,6 +116,7 @@ export default function Tasks() {
                                             <td><StatusBadge status={t.priority} map={priorityMap} /></td>
                                             <td><StatusBadge status={t.status} map={statusMap} /></td>
                                             <td className="table-cell-secondary">{getStaffName(t.assigneeId)}</td>
+                                            <td className="table-cell-secondary">{getStaffName(t.assignedById)}</td>
                                             <td className="table-cell-secondary">{getProjectName(t.projectId)}</td>
                                             <td className="table-cell-secondary" style={isOverdue(t) ? { color: 'var(--danger)', fontWeight: 500 } : {}}>
                                                 {t.dueDate ? new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}
@@ -146,7 +149,8 @@ export default function Tasks() {
                                                 <StatusBadge status={t.priority} map={priorityMap} />
                                             </div>
                                             <div className="kanban-card-meta">
-                                                <span>{getStaffName(t.assigneeId)}</span>
+                                                <span>To: {getStaffName(t.assigneeId)}</span>
+                                                {t.assignedById && <span>By: {getStaffName(t.assignedById)}</span>}
                                                 {t.dueDate && <span style={isOverdue(t) ? { color: 'var(--danger)' } : {}}>{new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>}
                                             </div>
                                         </div>
@@ -158,8 +162,7 @@ export default function Tasks() {
                 )}
             </div>
 
-            {showModal && (
-                <Modal onClose={() => { setShowModal(false); setEditItem(null); }} title={editItem ? 'Edit Task' : 'Add Task'}>
+            <Modal isOpen={showModal} onClose={() => { setShowModal(false); setEditItem(null); }} title={editItem ? 'Edit Task' : 'Add Task'}>
                     <form onSubmit={handleSave}>
                         <div className="modal-body">
                             <div className="form-group">
@@ -189,16 +192,25 @@ export default function Tasks() {
                                     </select>
                                 </div>
                                 <div className="form-group">
+                                    <label className="form-label">Assigned By</label>
+                                    <select className="form-select" name="assignedById" defaultValue={editItem?.assignedById || ''}>
+                                        <option value="">— Select —</option>
+                                        {staff.map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="form-row">
+                                <div className="form-group">
                                     <label className="form-label">Due Date</label>
                                     <input className="form-input" name="dueDate" type="date" defaultValue={editItem?.dueDate} />
                                 </div>
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Project</label>
-                                <select className="form-select" name="projectId" defaultValue={editItem?.projectId || ''}>
-                                    <option value="">No Project</option>
-                                    {(state.projects || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                </select>
+                                <div className="form-group">
+                                    <label className="form-label">Project</label>
+                                    <select className="form-select" name="projectId" defaultValue={editItem?.projectId || ''}>
+                                        <option value="">No Project</option>
+                                        {(state.projects || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                    </select>
+                                </div>
                             </div>
                             <div className="form-group">
                                 <label className="form-label">Description</label>
@@ -211,7 +223,6 @@ export default function Tasks() {
                         </div>
                     </form>
                 </Modal>
-            )}
         </>
     );
 }

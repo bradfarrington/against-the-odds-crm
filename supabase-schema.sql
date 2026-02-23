@@ -296,6 +296,26 @@ create table if not exists recovery_resources (
 
 
 -- ============================================
+-- 18. PROJECT STAFF (junction: projects ↔ staff)
+-- Run these ALTER/CREATE statements in Supabase SQL Editor
+-- ============================================
+
+-- alter table projects add column if not exists image_url text default '';
+-- alter table projects add column if not exists directions text default '';
+
+-- Add assigned_by_id to tasks (who delegated the task)
+-- alter table tasks add column if not exists assigned_by_id uuid references staff(id) on delete set null;
+
+-- create table if not exists project_staff (
+--   project_id uuid not null references projects(id) on delete cascade,
+--   staff_id   uuid not null references staff(id) on delete cascade,
+--   primary key (project_id, staff_id)
+-- );
+-- alter table project_staff enable row level security;
+-- create policy "Authenticated full access" on project_staff
+--   for all to authenticated using (true) with check (true);
+
+-- ============================================
 -- ROW LEVEL SECURITY (RLS)
 -- Only authenticated users can access data
 -- ============================================
