@@ -304,7 +304,7 @@ create table if not exists recovery_resources (
 -- alter table projects add column if not exists directions text default '';
 
 -- Add assigned_by_id to tasks (who delegated the task)
--- alter table tasks add column if not exists assigned_by_id uuid references staff(id) on delete set null;
+alter table tasks add column if not exists assigned_by_id uuid references staff(id) on delete set null;
 
 -- create table if not exists project_staff (
 --   project_id uuid not null references projects(id) on delete cascade,
@@ -314,6 +314,32 @@ create table if not exists recovery_resources (
 -- alter table project_staff enable row level security;
 -- create policy "Authenticated full access" on project_staff
 --   for all to authenticated using (true) with check (true);
+
+-- ============================================
+-- 19. TASK CATEGORIES
+-- ============================================
+
+create table if not exists task_categories (
+  id uuid primary key default uuid_generate_v4(),
+  name text not null,
+  sort_order integer default 0,
+  created_at timestamptz default now()
+);
+
+alter table task_categories enable row level security;
+
+-- Add category column to tasks
+alter table tasks add column if not exists category text default '';
+
+-- Seed default categories
+insert into task_categories (name, sort_order) values
+  ('Social Media', 0),
+  ('Clients', 1),
+  ('Business Dev', 2),
+  ('Recovery Services', 3),
+  ('Team', 4),
+  ('Projects', 5)
+on conflict do nothing;
 
 -- ============================================
 -- ROW LEVEL SECURITY (RLS)
@@ -352,7 +378,7 @@ begin
       'coaching_sessions','campaigns','projects','tasks','contracts',
       'meeting_notes','meeting_note_contacts','meeting_note_staff',
       'prevention_schedule','invoices','targets','templates',
-      'prevention_resources','recovery_resources'
+      'prevention_resources','recovery_resources','task_categories'
     ])
   loop
     execute format(

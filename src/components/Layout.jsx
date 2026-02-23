@@ -7,6 +7,7 @@ import {
     Building2,
     Users,
     CheckSquare,
+    NotebookPen,
     Columns3,
     FolderOpen,
     Receipt,
@@ -31,6 +32,7 @@ const navSections = [
             { to: '/contacts', icon: <Users />, label: 'Contacts' },
             { to: '/companies', icon: <Building2 />, label: 'Companies' },
             { to: '/tasks', icon: <CheckSquare />, label: 'Tasks' },
+            { to: '/meeting-notes', icon: <NotebookPen />, label: 'Meeting Notes' },
         ],
     },
     {
@@ -44,6 +46,7 @@ const navSections = [
     {
         label: 'Recovery',
         items: [
+            { to: '/recovery-seekers', icon: <UsersRound />, label: 'Recovery Seekers' },
             { to: '/treatment-tracker', icon: <HeartHandshake />, label: 'Treatment Tracker' },
             { to: '/recovery/resources', icon: <FolderOpen />, label: 'Resources' },
             { to: '/recovery/invoices', icon: <Receipt />, label: 'Invoices' },

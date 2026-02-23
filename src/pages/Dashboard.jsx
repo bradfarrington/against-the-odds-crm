@@ -229,6 +229,7 @@ function AdminDashboard({ state, navigate }) {
                                     ))}
                                     {tasks.filter(t => (t.priority === 'Urgent' || t.priority === 'High') && t.status !== 'Done').map(t => {
                                         const assignee = staff.find(s => s.id === t.assigneeId);
+                                        const assigner = staff.find(s => s.id === t.assignedById);
                                         return (
                                             <div key={t.id} className="activity-item" style={{ cursor: 'pointer' }} onClick={() => navigate('/tasks')}>
                                                 <div className="activity-icon" style={{ background: t.priority === 'Urgent' ? 'var(--danger-bg)' : 'var(--warning-bg)', color: t.priority === 'Urgent' ? 'var(--danger)' : 'var(--warning)' }}>
@@ -236,7 +237,7 @@ function AdminDashboard({ state, navigate }) {
                                                 </div>
                                                 <div className="activity-content">
                                                     <div className="activity-text"><strong>{t.title}</strong></div>
-                                                    <div className="activity-time">{assignee ? `${assignee.firstName} ${assignee.lastName}` : '—'} • Due {new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
+                                                    <div className="activity-time">{assignee ? `${assignee.firstName} ${assignee.lastName}` : '—'}{assigner ? ` • By: ${assigner.firstName} ${assigner.lastName}` : ''} • Due {new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
                                                 </div>
                                             </div>
                                         );
@@ -256,6 +257,8 @@ function AdminDashboard({ state, navigate }) {
    ═══════════════════════════════════════ */
 function PreventionDashboard({ state, user, navigate }) {
     const tasks = (state.tasks || []).filter(t => t.assigneeId === user.id && t.status !== 'Done');
+    const staff = state.staff || [];
+    const getStaffName = (id) => { const s = staff.find(s => s.id === id); return s ? `${s.firstName} ${s.lastName}` : ''; };
     const workshops = (state.preventionSchedule || []).filter(w => w.facilitatorId === user.id && w.status === 'Scheduled').sort((a, b) => new Date(a.date) - new Date(b.date));
     const completedCount = (state.preventionSchedule || []).filter(w => w.facilitatorId === user.id && w.status === 'Completed').length;
     const totalAttendees = (state.preventionSchedule || []).filter(w => w.facilitatorId === user.id && w.status === 'Completed').reduce((s, w) => s + (w.attendeeCount || 0), 0);
@@ -334,7 +337,7 @@ function PreventionDashboard({ state, user, navigate }) {
                                             </div>
                                             <div className="activity-content">
                                                 <div className="activity-text"><strong>{t.title}</strong></div>
-                                                <div className="activity-time">Overdue — was due {new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
+                                                <div className="activity-time">Overdue — was due {new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}{t.assignedById ? ` • By: ${getStaffName(t.assignedById)}` : ''}</div>
                                             </div>
                                             <StatusBadge status={t.priority} map={taskPriorityMap} />
                                         </div>
@@ -346,7 +349,7 @@ function PreventionDashboard({ state, user, navigate }) {
                                             </div>
                                             <div className="activity-content">
                                                 <div className="activity-text"><strong>{t.title}</strong></div>
-                                                <div className="activity-time">Due {new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} • {t.status}</div>
+                                                <div className="activity-time">Due {new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} • {t.status}{t.assignedById ? ` • By: ${getStaffName(t.assignedById)}` : ''}</div>
                                             </div>
                                             <StatusBadge status={t.priority} map={taskPriorityMap} />
                                         </div>
@@ -366,6 +369,8 @@ function PreventionDashboard({ state, user, navigate }) {
    ═══════════════════════════════════════ */
 function RecoveryDashboard({ state, user, navigate }) {
     const tasks = (state.tasks || []).filter(t => t.assigneeId === user.id && t.status !== 'Done');
+    const staff = state.staff || [];
+    const getStaffName = (id) => { const s = staff.find(s => s.id === id); return s ? `${s.firstName} ${s.lastName}` : ''; };
     const seekers = state.recoverySeekers || [];
     const activeSeekers = seekers.filter(s => s.status === 'Active');
 
@@ -458,7 +463,7 @@ function RecoveryDashboard({ state, user, navigate }) {
                                             </div>
                                             <div className="activity-content">
                                                 <div className="activity-text"><strong>{t.title}</strong></div>
-                                                <div className="activity-time">Overdue — was due {new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
+                                                <div className="activity-time">Overdue — was due {new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}{t.assignedById ? ` • By: ${getStaffName(t.assignedById)}` : ''}</div>
                                             </div>
                                             <StatusBadge status={t.priority} map={taskPriorityMap} />
                                         </div>
@@ -470,7 +475,7 @@ function RecoveryDashboard({ state, user, navigate }) {
                                             </div>
                                             <div className="activity-content">
                                                 <div className="activity-text"><strong>{t.title}</strong></div>
-                                                <div className="activity-time">Due {new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} • {t.status}</div>
+                                                <div className="activity-time">Due {new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} • {t.status}{t.assignedById ? ` • By: ${getStaffName(t.assignedById)}` : ''}</div>
                                             </div>
                                             <StatusBadge status={t.priority} map={taskPriorityMap} />
                                         </div>

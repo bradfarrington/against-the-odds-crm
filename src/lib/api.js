@@ -112,13 +112,20 @@ export const createStaffMember = (d) => insertRow('staff', d);
 export const modifyStaffMember = (id, d) => updateRow('staff', id, d);
 export const removeStaffMember = (id) => deleteRow('staff', id);
 
-// Projects (with project_staff junction)
 export async function fetchProjects() {
     const projects = await fetchAll('projects');
-    const { data: ps } = await supabase.from('project_staff').select('*');
+    let ps = [];
+    try {
+        const result = await supabase.from('project_staff').select('*');
+        if (result.data) {
+            ps = result.data;
+        }
+    } catch (e) {
+        console.warn('project_staff table might not exist yet', e);
+    }
     return projects.map(p => ({
         ...p,
-        staffIds: (ps || []).filter(r => r.project_id === p.id).map(r => r.staff_id),
+        staffIds: ps.filter(r => r.project_id === p.id).map(r => r.staff_id),
     }));
 }
 
@@ -126,9 +133,13 @@ export async function createProject(d) {
     const { staffIds = [], ...rest } = d;
     const project = await insertRow('projects', rest);
     if (staffIds.length) {
-        await supabase.from('project_staff').insert(
-            staffIds.map(sid => ({ project_id: project.id, staff_id: sid }))
-        );
+        try {
+            await supabase.from('project_staff').insert(
+                staffIds.map(sid => ({ project_id: project.id, staff_id: sid }))
+            );
+        } catch (e) {
+            console.warn('Could not insert project staff', e);
+        }
     }
     return { ...project, staffIds };
 }
@@ -137,11 +148,15 @@ export async function modifyProject(id, d) {
     const { staffIds, ...rest } = d;
     const project = await updateRow('projects', id, rest);
     if (staffIds !== undefined) {
-        await supabase.from('project_staff').delete().eq('project_id', id);
-        if (staffIds.length) {
-            await supabase.from('project_staff').insert(
-                staffIds.map(sid => ({ project_id: id, staff_id: sid }))
-            );
+        try {
+            await supabase.from('project_staff').delete().eq('project_id', id);
+            if (staffIds.length) {
+                await supabase.from('project_staff').insert(
+                    staffIds.map(sid => ({ project_id: id, staff_id: sid }))
+                );
+            }
+        } catch (e) {
+            console.warn('Could not update project staff', e);
         }
     }
     return { ...project, staffIds: staffIds ?? [] };
@@ -253,3 +268,9 @@ export const fetchRecoveryResources = () => fetchAll('recovery_resources', 'uplo
 export const createRecoveryResource = (d) => insertRow('recovery_resources', d);
 export const modifyRecoveryResource = (id, d) => updateRow('recovery_resources', id, d);
 export const removeRecoveryResource = (id) => deleteRow('recovery_resources', id);
+
+// Task Categories
+export const fetchTaskCategories = () => fetchAll('task_categories', 'sort_order');
+export const createTaskCategory = (d) => insertRow('task_categories', d);
+export const modifyTaskCategory = (id, d) => updateRow('task_categories', id, d);
+export const removeTaskCategory = (id) => deleteRow('task_categories', id);

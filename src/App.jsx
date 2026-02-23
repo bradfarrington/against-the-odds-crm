@@ -10,6 +10,7 @@ import CompanyDetail from './pages/CompanyDetail';
 import Contacts from './pages/Contacts';
 import ContactDetail from './pages/ContactDetail';
 import RecoverySeekers from './pages/RecoverySeekers';
+import RecoverySeekersList from './pages/RecoverySeekersList';
 import SeekerDetail from './pages/SeekerDetail';
 import Tasks from './pages/Tasks';
 import WorkshopTracker from './pages/WorkshopTracker';
@@ -19,7 +20,10 @@ import Invoices from './pages/Invoices';
 import Projects from './pages/Projects';
 import ProjectDetail from './pages/ProjectDetail';
 import Contracts from './pages/Contracts';
+import ContractDetail from './pages/ContractDetail';
 import StaffHub from './pages/StaffHub';
+import MeetingNotes from './pages/MeetingNotes';
+import MeetingNoteDetail from './pages/MeetingNoteDetail';
 import Settings from './pages/Settings';
 import { Loader2 } from 'lucide-react';
 
@@ -56,11 +60,14 @@ function AppRoutes() {
           <Route path="companies" element={<Companies />} />
           <Route path="companies/:id" element={<CompanyDetail />} />
           <Route path="tasks" element={<Tasks />} />
+          <Route path="meeting-notes" element={<MeetingNotes />} />
+          <Route path="meeting-notes/:id" element={<MeetingNoteDetail />} />
           {/* Prevention */}
           <Route path="workshop-tracker" element={<WorkshopTracker />} />
           <Route path="prevention/resources" element={<PreventionResources />} />
           <Route path="prevention/invoices" element={<Invoices category="Prevention" />} />
           {/* Recovery */}
+          <Route path="recovery-seekers" element={<RecoverySeekersList />} />
           <Route path="treatment-tracker" element={<RecoverySeekers />} />
           <Route path="recovery/resources" element={<RecoveryResources />} />
           <Route path="recovery/invoices" element={<Invoices category="Recovery" />} />
@@ -68,11 +75,11 @@ function AppRoutes() {
           <Route path="projects" element={<Projects />} />
           <Route path="projects/:id" element={<ProjectDetail />} />
           <Route path="contracts" element={<Contracts />} />
+          <Route path="contracts/:id" element={<ContractDetail />} />
           <Route path="staff-hub" element={<StaffHub />} />
           {/* Settings */}
           <Route path="settings" element={<Settings />} />
           {/* Legacy routes */}
-          <Route path="recovery-seekers" element={<RecoverySeekers />} />
           <Route path="recovery-seekers/:id" element={<SeekerDetail />} />
         </Route>
       </Routes>

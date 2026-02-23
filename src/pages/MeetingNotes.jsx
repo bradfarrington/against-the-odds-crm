@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
-import { Plus, Search, NotebookPen, Video, MapPin, X } from 'lucide-react';
+import { Plus, Search, NotebookPen, X } from 'lucide-react';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 
@@ -8,32 +9,43 @@ const typeMap = { 'Face to Face': 'success', Remote: 'info' };
 
 export default function MeetingNotes() {
     const { state, dispatch, ACTIONS } = useData();
+    const navigate = useNavigate();
     const [search, setSearch] = useState('');
     const [filterType, setFilterType] = useState('All');
     const [showModal, setShowModal] = useState(false);
     const [editItem, setEditItem] = useState(null);
-    const [expandedId, setExpandedId] = useState(null);
 
     const meetings = (state.meetingNotes || [])
         .filter(m => {
             const q = search.toLowerCase();
-            const matchesSearch = m.title.toLowerCase().includes(q) || (m.notes || '').toLowerCase().includes(q);
+            const matchesSearch =
+                m.title.toLowerCase().includes(q) ||
+                (m.notes || '').toLowerCase().includes(q) ||
+                (m.agenda || '').toLowerCase().includes(q);
             const matchesType = filterType === 'All' || m.meetingType === filterType;
             return matchesSearch && matchesType;
         })
         .sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    const staff = state.staff || [];
-    const getCompanyName = (id) => state.companies.find(c => c.id === id)?.name || '';
-    const getContactName = (id) => { const c = state.contacts.find(c => c.id === id); return c ? `${c.firstName} ${c.lastName}` : ''; };
-    const getStaffName = (id) => { const s = staff.find(s => s.id === id); return s ? `${s.firstName} ${s.lastName}` : ''; };
+    const getCompanyName = (id) => state.companies.find(c => c.id === id)?.name || '—';
+    const getContactName = (id) => {
+        const c = state.contacts.find(c => c.id === id);
+        return c ? `${c.firstName} ${c.lastName}` : '';
+    };
+
+    const fmtDate = (d) =>
+        d ? new Date(d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+
+    const truncate = (str, len = 60) => {
+        if (!str) return '—';
+        return str.length > len ? str.slice(0, len) + '…' : str;
+    };
 
     const handleSave = (e) => {
         e.preventDefault();
         const fd = new FormData(e.target);
         const data = Object.fromEntries(fd);
         if (!data.companyId) data.companyId = null;
-        // Parse multi-selects from hidden inputs
         data.contactIds = data.contactIds ? data.contactIds.split(',').filter(Boolean) : [];
         data.attendeeStaffIds = data.attendeeStaffIds ? data.attendeeStaffIds.split(',').filter(Boolean) : [];
         if (editItem) {
@@ -73,63 +85,73 @@ export default function MeetingNotes() {
                 </div>
             </div>
             <div className="page-body">
-                <div className="meeting-notes-list">
-                    {meetings.map(m => (
-                        <div key={m.id} className={`card meeting-card ${expandedId === m.id ? 'expanded' : ''}`} onClick={() => setExpandedId(expandedId === m.id ? null : m.id)}>
-                            <div className="card-header" style={{ cursor: 'pointer' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', flex: 1 }}>
-                                    <NotebookPen style={{ width: 18, height: 18, color: 'var(--primary)', flexShrink: 0 }} />
-                                    <div>
-                                        <div style={{ fontWeight: 600 }}>{m.title}</div>
-                                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', gap: 'var(--space-md)', marginTop: 2, flexWrap: 'wrap' }}>
-                                            <span>{new Date(m.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                                            {m.companyId && <span>• {getCompanyName(m.companyId)}</span>}
-                                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                                {m.meetingType === 'Remote' ? <Video style={{ width: 12, height: 12 }} /> : <MapPin style={{ width: 12, height: 12 }} />}
-                                                {m.location}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-                                    <StatusBadge status={m.meetingType} map={typeMap} />
-                                    <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setEditItem(m); setShowModal(true); }}>Edit</button>
-                                    <button className="btn btn-ghost btn-sm" onClick={(e) => handleDelete(m.id, e)}><X style={{ width: 14, height: 14 }} /></button>
-                                </div>
-                            </div>
-                            {expandedId === m.id && (
-                                <div className="card-body" style={{ borderTop: '1px solid var(--border)' }}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-lg)', marginBottom: 'var(--space-lg)' }}>
-                                        <div>
-                                            <div className="form-label" style={{ marginBottom: 4 }}>Attendees (External)</div>
-                                            <div style={{ fontSize: 14 }}>{(m.contactIds || []).map(id => getContactName(id)).filter(Boolean).join(', ') || 'None'}</div>
-                                        </div>
-                                        <div>
-                                            <div className="form-label" style={{ marginBottom: 4 }}>Attendees (ATO)</div>
-                                            <div style={{ fontSize: 14 }}>{(m.attendeeStaffIds || []).map(id => getStaffName(id)).filter(Boolean).join(', ') || 'None'}</div>
-                                        </div>
-                                    </div>
-                                    {m.agenda && (
-                                        <div style={{ marginBottom: 'var(--space-lg)' }}>
-                                            <div className="form-label" style={{ marginBottom: 4 }}>Agenda</div>
-                                            <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{m.agenda}</div>
-                                        </div>
-                                    )}
-                                    <div style={{ marginBottom: 'var(--space-lg)' }}>
-                                        <div className="form-label" style={{ marginBottom: 4 }}>Notes</div>
-                                        <div style={{ fontSize: 14, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{m.notes}</div>
-                                    </div>
-                                    {m.actionItems && (
-                                        <div style={{ background: 'var(--primary-glow)', borderRadius: 'var(--radius-md)', padding: 'var(--space-md)' }}>
-                                            <div className="form-label" style={{ marginBottom: 4, color: 'var(--primary)' }}>Action Items</div>
-                                            <div style={{ fontSize: 14, whiteSpace: 'pre-wrap' }}>{m.actionItems}</div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                    {meetings.length === 0 && <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-2xl)' }}>No meeting notes found</div>}
+                <div className="card">
+                    <div className="data-table-wrapper">
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Subject</th>
+                                    <th>Date</th>
+                                    <th>Agenda</th>
+                                    <th>Contact</th>
+                                    <th>Company</th>
+                                    <th>Type</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {meetings.map(m => {
+                                    const firstContactName = (m.contactIds || []).length > 0
+                                        ? getContactName(m.contactIds[0])
+                                        : '—';
+                                    const extraContacts = (m.contactIds || []).length > 1
+                                        ? ` +${(m.contactIds || []).length - 1}`
+                                        : '';
+                                    return (
+                                        <tr key={m.id} onClick={() => navigate(`/meeting-notes/${m.id}`)}>
+                                            <td>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
+                                                    <div style={{
+                                                        width: 34, height: 34, borderRadius: 'var(--radius-md)',
+                                                        background: 'linear-gradient(135deg, var(--primary), var(--primary-dark))',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        flexShrink: 0
+                                                    }}>
+                                                        <NotebookPen style={{ width: 16, height: 16, color: 'white' }} />
+                                                    </div>
+                                                    <div className="table-cell-main">{m.title}</div>
+                                                </div>
+                                            </td>
+                                            <td className="table-cell-secondary" style={{ whiteSpace: 'nowrap' }}>{fmtDate(m.date)}</td>
+                                            <td className="table-cell-secondary" style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {truncate(m.agenda)}
+                                            </td>
+                                            <td className="table-cell-secondary">
+                                                {firstContactName}{extraContacts}
+                                            </td>
+                                            <td className="table-cell-secondary">{m.companyId ? getCompanyName(m.companyId) : '—'}</td>
+                                            <td><StatusBadge status={m.meetingType} map={typeMap} /></td>
+                                            <td onClick={e => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
+                                                <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setEditItem(m); setShowModal(true); }}>Edit</button>
+                                                <button className="btn btn-ghost btn-sm" onClick={(e) => handleDelete(m.id, e)}><X style={{ width: 14, height: 14 }} /></button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                {meetings.length === 0 && (
+                                    <tr>
+                                        <td colSpan={7}>
+                                            <div className="empty-state">
+                                                <NotebookPen />
+                                                <h3>No meeting notes found</h3>
+                                                <p>Try adjusting your search or filters</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
@@ -140,7 +162,7 @@ export default function MeetingNotes() {
                     onSave={handleSave}
                     companies={state.companies}
                     contacts={state.contacts}
-                    staff={staff}
+                    staff={state.staff || []}
                 />
             )}
         </>
@@ -155,7 +177,7 @@ function MeetingModal({ editItem, onClose, onSave, companies, contacts, staff })
     const companyContacts = companyId ? contacts.filter(c => c.companyId === companyId) : contacts;
 
     return (
-        <Modal onClose={onClose} title={editItem ? 'Edit Meeting' : 'New Meeting'} large>
+        <Modal isOpen={true} onClose={onClose} title={editItem ? 'Edit Meeting' : 'New Meeting'} size="lg">
             <form onSubmit={onSave}>
                 <input type="hidden" name="contactIds" value={selectedContacts.join(',')} />
                 <input type="hidden" name="attendeeStaffIds" value={selectedStaff.join(',')} />

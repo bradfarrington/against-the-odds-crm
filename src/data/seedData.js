@@ -340,13 +340,13 @@ export function generateSeedTasks(staff, projects) {
   ];
 }
 
-export function generateSeedContracts(companies) {
+export function generateSeedContracts(companies, contacts) {
   return [
-    { id: uuid(), title: 'MMU Awareness Programme 2025/26', companyId: companies[0].id, status: 'Active', value: 15000, startDate: '2025-09-01', endDate: '2026-07-31', renewalDate: '2026-06-01', type: 'Service Agreement', notes: 'Annual renewable. Covers 24 workshops, 12 drop-in sessions, and 2 staff training days.', createdAt: '2025-08-15T10:00:00Z' },
-    { id: uuid(), title: 'Salford College Workshop Contract', companyId: companies[1].id, status: 'Active', value: 8000, startDate: '2025-10-01', endDate: '2026-06-30', renewalDate: '2026-05-01', type: 'Service Agreement', notes: 'Termly workshop delivery. 6 workshops per term for 3 terms.', createdAt: '2025-09-20T09:00:00Z' },
-    { id: uuid(), title: 'Bolton Council Community Grant', companyId: companies[4].id, status: 'Active', value: 25000, startDate: '2025-11-01', endDate: '2026-10-31', renewalDate: '2026-08-01', type: 'Grant Agreement', notes: 'Annual grant for community outreach. Quarterly reporting required.', createdAt: '2025-10-10T11:00:00Z' },
-    { id: uuid(), title: 'Betknowmore Partnership Agreement', companyId: companies[2].id, status: 'Active', value: 0, startDate: '2026-01-01', endDate: '2026-12-31', renewalDate: '2026-10-01', type: 'Partnership Agreement', notes: 'Non-financial partnership for peer mentor training and referral pathways.', createdAt: '2025-12-15T14:00:00Z' },
-    { id: uuid(), title: 'GamCare Cross-Referral Agreement', companyId: companies[3].id, status: 'Active', value: 0, startDate: '2025-07-01', endDate: '2026-06-30', renewalDate: '2026-05-01', type: 'Referral Agreement', notes: 'Mutual referral pathway agreement. Annual review completed Feb 2026.', createdAt: '2025-06-20T10:00:00Z' },
+    { id: uuid(), title: 'MMU Awareness Programme 2025/26', companyId: companies[0].id, contactId: contacts[2].id, status: 'Active', value: 15000, startDate: '2025-09-01', endDate: '2026-07-31', renewalDate: '2026-06-01', type: 'Service Agreement', partnershipType: 'Prevention', notes: 'Annual renewable. Covers 24 workshops, 12 drop-in sessions, and 2 staff training days.', createdAt: '2025-08-15T10:00:00Z' },
+    { id: uuid(), title: 'Salford College Workshop Contract', companyId: companies[1].id, contactId: contacts[4].id, status: 'Active', value: 8000, startDate: '2025-10-01', endDate: '2026-06-30', renewalDate: '2026-05-01', type: 'Service Agreement', partnershipType: 'Prevention', notes: 'Termly workshop delivery. 6 workshops per term for 3 terms.', createdAt: '2025-09-20T09:00:00Z' },
+    { id: uuid(), title: 'Bolton Council Community Grant', companyId: companies[4].id, contactId: contacts[10].id, status: 'Active', value: 25000, startDate: '2025-11-01', endDate: '2026-10-31', renewalDate: '2026-08-01', type: 'Grant Agreement', partnershipType: 'Community', notes: 'Annual grant for community outreach. Quarterly reporting required.', createdAt: '2025-10-10T11:00:00Z' },
+    { id: uuid(), title: 'Betknowmore Partnership Agreement', companyId: companies[2].id, contactId: contacts[5].id, status: 'Active', value: 0, startDate: '2026-01-01', endDate: '2026-12-31', renewalDate: '2026-10-01', type: 'Partnership Agreement', partnershipType: 'Recovery', notes: 'Non-financial partnership for peer mentor training and referral pathways.', createdAt: '2025-12-15T14:00:00Z' },
+    { id: uuid(), title: 'GamCare Cross-Referral Agreement', companyId: companies[3].id, contactId: contacts[8].id, status: 'Active', value: 0, startDate: '2025-07-01', endDate: '2026-06-30', renewalDate: '2026-05-01', type: 'Referral Agreement', partnershipType: 'Referral', notes: 'Mutual referral pathway agreement. Annual review completed Feb 2026.', createdAt: '2025-06-20T10:00:00Z' },
   ];
 }
 
@@ -445,7 +445,7 @@ export function getInitialData() {
   const staff = seedStaff;
   const projects = generateSeedProjects(companies, staff);
   const tasks = generateSeedTasks(staff, projects);
-  const contracts = generateSeedContracts(companies);
+  const contracts = generateSeedContracts(companies, contacts);
   const meetingNotes = generateSeedMeetingNotes(companies, contacts, staff);
   const preventionSchedule = generateSeedPreventionSchedule(companies, contacts, staff);
   const invoices = generateSeedInvoices(companies);

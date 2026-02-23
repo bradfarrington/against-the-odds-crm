@@ -36,6 +36,10 @@ const ACTIONS = {
     ADD_TASK: 'ADD_TASK',
     UPDATE_TASK: 'UPDATE_TASK',
     DELETE_TASK: 'DELETE_TASK',
+    // Task Categories
+    ADD_TASK_CATEGORY: 'ADD_TASK_CATEGORY',
+    UPDATE_TASK_CATEGORY: 'UPDATE_TASK_CATEGORY',
+    DELETE_TASK_CATEGORY: 'DELETE_TASK_CATEGORY',
     // Contracts
     ADD_CONTRACT: 'ADD_CONTRACT',
     UPDATE_CONTRACT: 'UPDATE_CONTRACT',
@@ -84,6 +88,7 @@ const emptyState = {
     staff: [],
     projects: [],
     tasks: [],
+    taskCategories: [],
     contracts: [],
     meetingNotes: [],
     preventionSchedule: [],
@@ -179,6 +184,11 @@ function dataReducer(state, action) {
         case ACTIONS.UPDATE_TASK: return crudLocal(state, 'tasks', { crud: 'UPDATE', payload: action.payload });
         case ACTIONS.DELETE_TASK: return crudLocal(state, 'tasks', { crud: 'DELETE', payload: action.payload });
 
+        // Task Categories
+        case ACTIONS.ADD_TASK_CATEGORY: return crudLocal(state, 'taskCategories', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_TASK_CATEGORY: return crudLocal(state, 'taskCategories', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_TASK_CATEGORY: return crudLocal(state, 'taskCategories', { crud: 'DELETE', payload: action.payload });
+
         // Contracts
         case ACTIONS.ADD_CONTRACT: return crudLocal(state, 'contracts', { crud: 'ADD', payload: action.payload });
         case ACTIONS.UPDATE_CONTRACT: return crudLocal(state, 'contracts', { crud: 'UPDATE', payload: action.payload });
@@ -261,6 +271,10 @@ const apiMap = {
     [ACTIONS.UPDATE_TASK]: (p) => api.modifyTask(p.id, p),
     [ACTIONS.DELETE_TASK]: (p) => api.removeTask(p),
 
+    [ACTIONS.ADD_TASK_CATEGORY]: (p) => api.createTaskCategory(p),
+    [ACTIONS.UPDATE_TASK_CATEGORY]: (p) => api.modifyTaskCategory(p.id, p),
+    [ACTIONS.DELETE_TASK_CATEGORY]: (p) => api.removeTaskCategory(p),
+
     [ACTIONS.ADD_CONTRACT]: (p) => api.createContract(p),
     [ACTIONS.UPDATE_CONTRACT]: (p) => api.modifyContract(p.id, p),
     [ACTIONS.DELETE_CONTRACT]: (p) => api.removeContract(p),
@@ -319,6 +333,7 @@ export function DataProvider({ children }) {
                 companies, contacts, recoverySeekers, campaigns, staff,
                 projects, tasks, contracts, meetingNotes, preventionSchedule,
                 invoices, targets, templates, preventionResources, recoveryResources,
+                taskCategories,
             ] = await Promise.all([
                 api.fetchCompanies(),
                 api.fetchContacts(),
@@ -335,6 +350,7 @@ export function DataProvider({ children }) {
                 api.fetchTemplates(),
                 api.fetchPreventionResources(),
                 api.fetchRecoveryResources(),
+                api.fetchTaskCategories(),
             ]);
             rawDispatch({
                 type: ACTIONS.SET_DATA,
@@ -342,6 +358,7 @@ export function DataProvider({ children }) {
                     companies, contacts, recoverySeekers, campaigns, staff,
                     projects, tasks, contracts, meetingNotes, preventionSchedule,
                     invoices, targets, templates, preventionResources, recoveryResources,
+                    taskCategories,
                 },
             });
         } catch (err) {

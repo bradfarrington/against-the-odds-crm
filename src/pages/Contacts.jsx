@@ -108,7 +108,7 @@ export default function Contacts() {
                                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                     fontSize: 13, fontWeight: 600, color: 'white', flexShrink: 0
                                                 }}>
-                                                    {contact.firstName[0]}{contact.lastName[0]}
+                                                    {contact.firstName?.[0] || ''}{contact.lastName?.[0] || ''}
                                                 </div>
                                                 <div className="table-cell-main">{contact.firstName} {contact.lastName}</div>
                                             </div>

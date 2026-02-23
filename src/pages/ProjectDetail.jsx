@@ -37,7 +37,8 @@ export default function ProjectDetail() {
 
     // Tasks
     const [showTaskModal, setShowTaskModal] = useState(false);
-    const [taskForm, setTaskForm] = useState({ title: '', priority: 'Medium', dueDate: '', assigneeId: '', assignedById: '' });
+    const [editingTask, setEditingTask] = useState(null);
+    const [taskForm, setTaskForm] = useState({ title: '', status: 'To Do', priority: 'Medium', dueDate: '', assigneeId: '', assignedById: '', description: '', category: 'Projects' });
 
     // Staff
     const [showAddStaff, setShowAddStaff] = useState(false);
@@ -125,16 +126,37 @@ export default function ProjectDetail() {
         setEditingDirections(false);
     };
 
-    const handleToggleTask = (task) => {
-        const newStatus = task.status === 'Done' ? 'To Do' : 'Done';
-        dispatch({ type: ACTIONS.UPDATE_TASK, payload: { ...task, status: newStatus } });
+    const handleOpenEditTask = (task) => {
+        setEditingTask(task);
+        setTaskForm({
+            title: task.title || '',
+            status: task.status || 'To Do',
+            priority: task.priority || 'Medium',
+            dueDate: task.dueDate || '',
+            assigneeId: task.assigneeId || '',
+            assignedById: task.assignedById || '',
+            description: task.description || '',
+            category: task.category || 'Projects',
+        });
+        setShowTaskModal(true);
     };
 
-    const handleAddTask = (e) => {
+    const handleSaveTask = (e) => {
         e.preventDefault();
-        dispatch({ type: ACTIONS.ADD_TASK, payload: { ...taskForm, projectId: id, status: 'To Do' } });
-        setTaskForm({ title: '', priority: 'Medium', dueDate: '', assigneeId: '' });
+        if (editingTask) {
+            dispatch({ type: ACTIONS.UPDATE_TASK, payload: { id: editingTask.id, ...taskForm, projectId: id } });
+        } else {
+            dispatch({ type: ACTIONS.ADD_TASK, payload: { ...taskForm, projectId: id } });
+        }
+        setTaskForm({ title: '', status: 'To Do', priority: 'Medium', dueDate: '', assigneeId: '', assignedById: '', description: '', category: 'Projects' });
+        setEditingTask(null);
         setShowTaskModal(false);
+    };
+
+    const closeTaskModal = () => {
+        setShowTaskModal(false);
+        setEditingTask(null);
+        setTaskForm({ title: '', status: 'To Do', priority: 'Medium', dueDate: '', assigneeId: '', assignedById: '', description: '', category: 'Projects' });
     };
 
     const handleDeleteTask = (taskId) => {
@@ -289,7 +311,7 @@ export default function ProjectDetail() {
                                     <CheckSquare size={18} /> Tasks
                                     <span className="badge badge-neutral" style={{ marginLeft: 4 }}>{doneTasks}/{tasks.length}</span>
                                 </h3>
-                                <button className="btn btn-primary btn-sm" onClick={() => setShowTaskModal(true)}>
+                                <button className="btn btn-primary btn-sm" onClick={() => { setEditingTask(null); setShowTaskModal(true); }}>
                                     <Plus size={14} /> Add Task
                                 </button>
                             </div>
@@ -306,11 +328,13 @@ export default function ProjectDetail() {
                                                 padding: 'var(--space-sm) var(--space-md)',
                                                 borderBottom: '1px solid var(--border)',
                                                 opacity: task.status === 'Done' ? 0.6 : 1,
+                                                cursor: 'pointer',
                                             }}
+                                            onClick={() => handleOpenEditTask(task)}
                                         >
                                             <button
                                                 className="btn btn-ghost btn-sm"
-                                                onClick={() => handleToggleTask(task)}
+                                                onClick={(e) => { e.stopPropagation(); const newStatus = task.status === 'Done' ? 'To Do' : 'Done'; dispatch({ type: ACTIONS.UPDATE_TASK, payload: { ...task, status: newStatus } }); }}
                                                 style={{ padding: 2, flexShrink: 0 }}
                                             >
                                                 {task.status === 'Done'
@@ -334,10 +358,15 @@ export default function ProjectDetail() {
                                             )}
                                             {task.assigneeId && (
                                                 <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                                                    {getStaffName(task.assigneeId)}
+                                                    To: {getStaffName(task.assigneeId)}
                                                 </span>
                                             )}
-                                            <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteTask(task.id)} style={{ padding: 2, flexShrink: 0 }}>
+                                            {task.assignedById && (
+                                                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                                                    By: {getStaffName(task.assignedById)}
+                                                </span>
+                                            )}
+                                            <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }} style={{ padding: 2, flexShrink: 0 }}>
                                                 <X size={14} style={{ color: 'var(--text-muted)' }} />
                                             </button>
                                         </div>
@@ -488,123 +517,133 @@ export default function ProjectDetail() {
                 </div>
             </div>
 
-            {/* Add Task Modal */}
-            <Modal isOpen={showTaskModal} onClose={() => { setShowTaskModal(false); setTaskForm({ title: '', priority: 'Medium', dueDate: '', assigneeId: '' }); }} title="Add Task">
-                    <form onSubmit={handleAddTask}>
-                        <div className="modal-body">
+            {/* Add/Edit Task Modal */}
+            <Modal isOpen={showTaskModal} onClose={closeTaskModal} title={editingTask ? 'Edit Task' : 'Add Task'}>
+                <form onSubmit={handleSaveTask}>
+                    <div className="modal-body">
+                        <div className="form-group">
+                            <label className="form-label">Task Title</label>
+                            <input className="form-input" required autoFocus value={taskForm.title} onChange={e => setTaskForm(p => ({ ...p, title: e.target.value }))} placeholder="What needs to be done?" />
+                        </div>
+                        <div className="form-row">
                             <div className="form-group">
-                                <label className="form-label">Task Title *</label>
-                                <input
-                                    className="form-input"
-                                    required
-                                    autoFocus
-                                    value={taskForm.title}
-                                    onChange={e => setTaskForm(p => ({ ...p, title: e.target.value }))}
-                                    placeholder="What needs to be done?"
-                                />
-                            </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">Priority</label>
-                                    <select className="form-select" value={taskForm.priority} onChange={e => setTaskForm(p => ({ ...p, priority: e.target.value }))}>
-                                        <option>High</option>
-                                        <option>Medium</option>
-                                        <option>Low</option>
-                                    </select>
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">Due Date</label>
-                                    <input className="form-input" type="date" value={taskForm.dueDate} onChange={e => setTaskForm(p => ({ ...p, dueDate: e.target.value }))} />
-                                </div>
+                                <label className="form-label">Status</label>
+                                <select className="form-select" value={taskForm.status} onChange={e => setTaskForm(p => ({ ...p, status: e.target.value }))}>
+                                    <option>To Do</option><option>In Progress</option><option>Done</option>
+                                </select>
                             </div>
                             <div className="form-group">
-                                <label className="form-label">Assignee</label>
+                                <label className="form-label">Priority</label>
+                                <select className="form-select" value={taskForm.priority} onChange={e => setTaskForm(p => ({ ...p, priority: e.target.value }))}>
+                                    <option>Low</option><option>Medium</option><option>High</option><option>Urgent</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label className="form-label">Assigned To</label>
                                 <select className="form-select" value={taskForm.assigneeId} onChange={e => setTaskForm(p => ({ ...p, assigneeId: e.target.value }))}>
                                     <option value="">Unassigned</option>
                                     {allStaff.map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}
                                 </select>
                             </div>
+                            <div className="form-group">
+                                <label className="form-label">Assigned By</label>
+                                <select className="form-select" value={taskForm.assignedById} onChange={e => setTaskForm(p => ({ ...p, assignedById: e.target.value }))}>
+                                    <option value="">— Select —</option>
+                                    {allStaff.map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}
+                                </select>
+                            </div>
                         </div>
-                        <div className="modal-footer">
-                            <button type="button" className="btn btn-secondary" onClick={() => { setShowTaskModal(false); setTaskForm({ title: '', priority: 'Medium', dueDate: '', assigneeId: '' }); }}>Cancel</button>
-                            <button type="submit" className="btn btn-primary">Add Task</button>
+                        <div className="form-group">
+                            <label className="form-label">Due Date</label>
+                            <input className="form-input" type="date" value={taskForm.dueDate} onChange={e => setTaskForm(p => ({ ...p, dueDate: e.target.value }))} />
                         </div>
-                    </form>
-                </Modal>
+                        <div className="form-group">
+                            <label className="form-label">Description</label>
+                            <textarea className="form-textarea" value={taskForm.description} onChange={e => setTaskForm(p => ({ ...p, description: e.target.value }))} />
+                        </div>
+                    </div>
+                    <div className="modal-footer">
+                        <button type="button" className="btn btn-secondary" onClick={closeTaskModal}>Cancel</button>
+                        <button type="submit" className="btn btn-primary">{editingTask ? 'Save Changes' : 'Add Task'}</button>
+                    </div>
+                </form>
+            </Modal>
 
             {/* Edit Project Modal */}
             <Modal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Project" size="lg">
-                    <form onSubmit={handleEditSubmit}>
-                        <div className="modal-body">
+                <form onSubmit={handleEditSubmit}>
+                    <div className="modal-body">
+                        <div className="form-group">
+                            <label className="form-label">Project Name *</label>
+                            <input className="form-input" required value={editForm.name || ''} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} />
+                        </div>
+                        <div className="form-row">
                             <div className="form-group">
-                                <label className="form-label">Project Name *</label>
-                                <input className="form-input" required value={editForm.name || ''} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} />
-                            </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">Type</label>
-                                    <select className="form-select" value={editForm.type || 'Awareness'} onChange={e => setEditForm(p => ({ ...p, type: e.target.value }))}>
-                                        <option>Awareness</option><option>Recovery</option><option>Internal</option>
-                                    </select>
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">Status</label>
-                                    <select className="form-select" value={editForm.status || 'Planning'} onChange={e => setEditForm(p => ({ ...p, status: e.target.value }))}>
-                                        <option>Planning</option><option>Active</option><option>On Hold</option><option>Completed</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">Organisation</label>
-                                    <select className="form-select" value={editForm.companyId || ''} onChange={e => setEditForm(p => ({ ...p, companyId: e.target.value }))}>
-                                        <option value="">None (Internal)</option>
-                                        {(state.companies || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                    </select>
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">Project Lead</label>
-                                    <select className="form-select" value={editForm.leadId || ''} onChange={e => setEditForm(p => ({ ...p, leadId: e.target.value }))}>
-                                        <option value="">Unassigned</option>
-                                        {allStaff.map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">Start Date</label>
-                                    <input className="form-input" type="date" value={editForm.startDate || ''} onChange={e => setEditForm(p => ({ ...p, startDate: e.target.value }))} />
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">End Date</label>
-                                    <input className="form-input" type="date" value={editForm.endDate || ''} onChange={e => setEditForm(p => ({ ...p, endDate: e.target.value }))} />
-                                </div>
+                                <label className="form-label">Type</label>
+                                <select className="form-select" value={editForm.type || 'Awareness'} onChange={e => setEditForm(p => ({ ...p, type: e.target.value }))}>
+                                    <option>Awareness</option><option>Recovery</option><option>Internal</option>
+                                </select>
                             </div>
                             <div className="form-group">
-                                <label className="form-label">Budget (£)</label>
-                                <input className="form-input" type="number" value={editForm.budget || ''} onChange={e => setEditForm(p => ({ ...p, budget: e.target.value }))} />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Description</label>
-                                <textarea className="form-textarea" value={editForm.description || ''} onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))} />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Notes</label>
-                                <textarea className="form-textarea" value={editForm.notes || ''} onChange={e => setEditForm(p => ({ ...p, notes: e.target.value }))} />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    <MapPin size={14} /> Directions
-                                </label>
-                                <textarea className="form-textarea" value={editForm.directions || ''} onChange={e => setEditForm(p => ({ ...p, directions: e.target.value }))} placeholder="How to get to the venue…" />
+                                <label className="form-label">Status</label>
+                                <select className="form-select" value={editForm.status || 'Planning'} onChange={e => setEditForm(p => ({ ...p, status: e.target.value }))}>
+                                    <option>Planning</option><option>Active</option><option>On Hold</option><option>Completed</option>
+                                </select>
                             </div>
                         </div>
-                        <div className="modal-footer">
-                            <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>Cancel</button>
-                            <button type="submit" className="btn btn-primary">Save Changes</button>
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label className="form-label">Organisation</label>
+                                <select className="form-select" value={editForm.companyId || ''} onChange={e => setEditForm(p => ({ ...p, companyId: e.target.value }))}>
+                                    <option value="">None (Internal)</option>
+                                    {(state.companies || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Project Lead</label>
+                                <select className="form-select" value={editForm.leadId || ''} onChange={e => setEditForm(p => ({ ...p, leadId: e.target.value }))}>
+                                    <option value="">Unassigned</option>
+                                    {allStaff.map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}
+                                </select>
+                            </div>
                         </div>
-                    </form>
-                </Modal>
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label className="form-label">Start Date</label>
+                                <input className="form-input" type="date" value={editForm.startDate || ''} onChange={e => setEditForm(p => ({ ...p, startDate: e.target.value }))} />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">End Date</label>
+                                <input className="form-input" type="date" value={editForm.endDate || ''} onChange={e => setEditForm(p => ({ ...p, endDate: e.target.value }))} />
+                            </div>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Budget (£)</label>
+                            <input className="form-input" type="number" value={editForm.budget || ''} onChange={e => setEditForm(p => ({ ...p, budget: e.target.value }))} />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Description</label>
+                            <textarea className="form-textarea" value={editForm.description || ''} onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))} />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Notes</label>
+                            <textarea className="form-textarea" value={editForm.notes || ''} onChange={e => setEditForm(p => ({ ...p, notes: e.target.value }))} />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <MapPin size={14} /> Directions
+                            </label>
+                            <textarea className="form-textarea" value={editForm.directions || ''} onChange={e => setEditForm(p => ({ ...p, directions: e.target.value }))} placeholder="How to get to the venue…" />
+                        </div>
+                    </div>
+                    <div className="modal-footer">
+                        <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>Cancel</button>
+                        <button type="submit" className="btn btn-primary">Save Changes</button>
+                    </div>
+                </form>
+            </Modal>
         </>
     );
 }

@@ -1,34 +1,105 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useData } from '../context/DataContext';
-import { Plus, Search, Calendar, MapPin, Users, X } from 'lucide-react';
+import { Plus, Search, Building2, User, Users, PoundSterling, X, ImagePlus, Trash2, UploadCloud, Loader2 } from 'lucide-react';
 import Modal from '../components/Modal';
-import StatusBadge from '../components/StatusBadge';
+import { supabase } from '../lib/supabaseClient';
 
-const statusMap = { Scheduled: 'info', Completed: 'success', Cancelled: 'danger' };
-const typeMap = { Awareness: 'primary', Prevention: 'warning', Training: 'neutral' };
+const STAGES = [
+    { key: 'Initial Conversation', label: 'Initial Conversation', color: 'var(--text-muted)' },
+    { key: 'Proposal', label: 'Proposal', color: 'var(--info)' },
+    { key: 'In Comms', label: 'In Comms', color: 'var(--warning)' },
+    { key: 'Session Booked', label: 'Session Booked', color: 'var(--primary)' },
+    { key: 'Post Session', label: 'Post Session', color: 'var(--success)' },
+    { key: 'Invoicing', label: 'Invoicing', color: '#a855f7' },
+];
+
+const STAGE_KEYS = STAGES.map(s => s.key);
 
 export default function WorkshopTracker() {
     const { state, dispatch, ACTIONS } = useData();
     const [search, setSearch] = useState('');
     const [showModal, setShowModal] = useState(false);
     const [editItem, setEditItem] = useState(null);
+    const [draggedItem, setDraggedItem] = useState(null);
+    const [dragOverColumn, setDragOverColumn] = useState(null);
+    const [imageUrl, setImageUrl] = useState('');
+    const [uploading, setUploading] = useState(false);
+    const fileInputRef = useRef(null);
+
+    const staff = state.staff || [];
+    const companies = state.companies || [];
+    const contacts = state.contacts || [];
 
     const workshops = (state.preventionSchedule || []).filter(w => {
         const q = search.toLowerCase();
-        return w.title.toLowerCase().includes(q) || (w.location || '').toLowerCase().includes(q);
+        const companyName = getCompanyName(w.companyId);
+        const contactName = getContactName(w.contactId);
+        return (
+            (w.title || '').toLowerCase().includes(q) ||
+            companyName.toLowerCase().includes(q) ||
+            contactName.toLowerCase().includes(q)
+        );
     });
 
-    const staff = state.staff || [];
-    const getStaffName = (id) => { const s = staff.find(s => s.id === id); return s ? `${s.firstName} ${s.lastName}` : '—'; };
+    function getStaffName(id) {
+        const s = staff.find(s => s.id === id);
+        return s ? `${s.firstName} ${s.lastName}` : '—';
+    }
+    function getCompanyName(id) {
+        const c = companies.find(c => c.id === id);
+        return c ? c.name : '';
+    }
+    function getContactName(id) {
+        const c = contacts.find(c => c.id === id);
+        return c ? `${c.firstName} ${c.lastName}` : '';
+    }
 
-    const columns = [
-        { key: 'Scheduled', label: 'Scheduled', color: 'var(--info)' },
-        { key: 'Completed', label: 'Completed', color: 'var(--success)' },
-        { key: 'Cancelled', label: 'Cancelled', color: 'var(--danger)' },
-    ];
+    // Normalise stage — old statuses map to Initial Conversation
+    function getStage(w) {
+        if (STAGE_KEYS.includes(w.status)) return w.status;
+        return 'Initial Conversation';
+    }
 
-    const moveWorkshop = (id, newStatus) => {
-        dispatch({ type: ACTIONS.UPDATE_WORKSHOP, payload: { id, status: newStatus } });
+    // ─── Image Upload ──────────────────────────────────────
+    const handleImageUpload = async (file) => {
+        if (!file || !file.type.startsWith('image/')) return;
+        setUploading(true);
+        try {
+            const ext = file.name.split('.').pop();
+            const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+            const { data, error } = await supabase.storage
+                .from('workshop-images')
+                .upload(fileName, file, { cacheControl: '3600', upsert: false });
+            if (error) throw error;
+            const { data: urlData } = supabase.storage.from('workshop-images').getPublicUrl(data.path);
+            setImageUrl(urlData.publicUrl);
+        } catch (err) {
+            console.error('Image upload failed:', err);
+            // Fallback: use a local data URL so the feature still works without storage
+            const reader = new FileReader();
+            reader.onload = (ev) => setImageUrl(ev.target.result);
+            reader.readAsDataURL(file);
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const handleRemoveImage = () => {
+        setImageUrl('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    // ─── CRUD ──────────────────────────────────────────────
+    const openModal = (item) => {
+        setEditItem(item);
+        setImageUrl(item?.imageUrl || '');
+        setShowModal(true);
+    };
+
+    const closeModal = () => {
+        setShowModal(false);
+        setEditItem(null);
+        setImageUrl('');
     };
 
     const handleSave = (e) => {
@@ -40,13 +111,15 @@ export default function WorkshopTracker() {
         if (!data.companyId) data.companyId = null;
         if (!data.contactId) data.contactId = null;
         if (!data.facilitatorId) data.facilitatorId = null;
+        if (!data.value) data.value = null;
+        data.imageUrl = imageUrl || null;
+
         if (editItem) {
             dispatch({ type: ACTIONS.UPDATE_WORKSHOP, payload: { id: editItem.id, ...data } });
         } else {
             dispatch({ type: ACTIONS.ADD_WORKSHOP, payload: data });
         }
-        setShowModal(false);
-        setEditItem(null);
+        closeModal();
     };
 
     const handleDelete = (id, e) => {
@@ -54,70 +127,132 @@ export default function WorkshopTracker() {
         if (confirm('Delete this workshop?')) dispatch({ type: ACTIONS.DELETE_WORKSHOP, payload: id });
     };
 
-    const completed = workshops.filter(w => w.status === 'Completed');
-    const totalAttendees = completed.reduce((sum, w) => sum + (w.attendeeCount || 0), 0);
+    // ─── Drag & Drop ──────────────────────────────────────
+    const handleDragStart = (e, item) => {
+        setDraggedItem(item);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', item.id);
+        requestAnimationFrame(() => {
+            e.target.classList.add('dragging');
+        });
+    };
+
+    const handleDragEnd = (e) => {
+        e.target.classList.remove('dragging');
+        setDraggedItem(null);
+        setDragOverColumn(null);
+    };
+
+    const handleDragOver = (e, stageKey) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setDragOverColumn(stageKey);
+    };
+
+    const handleDragLeave = (e) => {
+        if (e.currentTarget && !e.currentTarget.contains(e.relatedTarget)) {
+            setDragOverColumn(null);
+        }
+    };
+
+    const handleDrop = (e, stageKey) => {
+        e.preventDefault();
+        setDragOverColumn(null);
+        if (draggedItem && getStage(draggedItem) !== stageKey) {
+            dispatch({ type: ACTIONS.UPDATE_WORKSHOP, payload: { id: draggedItem.id, status: stageKey } });
+        }
+        setDraggedItem(null);
+    };
+
+    // Stats
+    const totalValue = workshops.reduce((sum, w) => sum + (parseFloat(w.value) || 0), 0);
 
     return (
         <>
             <div className="page-header">
                 <div className="page-header-left">
                     <h1>Workshop Tracker</h1>
-                    <div className="page-header-subtitle">{workshops.length} workshop{workshops.length !== 1 ? 's' : ''} • {totalAttendees} people reached</div>
+                    <div className="page-header-subtitle">
+                        {workshops.length} workshop{workshops.length !== 1 ? 's' : ''}
+                        {totalValue > 0 && ` · £${totalValue.toLocaleString()} pipeline`}
+                    </div>
                 </div>
                 <div className="page-header-actions">
                     <div className="search-input-wrapper">
                         <Search />
                         <input className="search-input" placeholder="Search workshops…" value={search} onChange={e => setSearch(e.target.value)} />
                     </div>
-                    <button className="btn btn-primary" onClick={() => { setEditItem(null); setShowModal(true); }}>
+                    <button className="btn btn-primary" onClick={() => openModal(null)}>
                         <Plus /> Add Workshop
                     </button>
                 </div>
             </div>
             <div className="page-body">
-                <div className="kanban-board">
-                    {columns.map(col => {
-                        const items = workshops.filter(w => w.status === col.key).sort((a, b) => new Date(a.date) - new Date(b.date));
+                <div className="kanban-board" style={{ gridTemplateColumns: `repeat(${STAGES.length}, minmax(240px, 1fr))` }}>
+                    {STAGES.map(stage => {
+                        const items = workshops.filter(w => getStage(w) === stage.key);
                         return (
-                            <div key={col.key} className="kanban-column">
+                            <div
+                                key={stage.key}
+                                className={`kanban-column${dragOverColumn === stage.key ? ' drag-over' : ''}`}
+                                onDragOver={(e) => handleDragOver(e, stage.key)}
+                                onDragLeave={handleDragLeave}
+                                onDrop={(e) => handleDrop(e, stage.key)}
+                            >
                                 <div className="kanban-column-header">
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-                                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: col.color }} />
-                                        {col.label}
+                                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: stage.color, flexShrink: 0 }} />
+                                        <span style={{ fontSize: 13 }}>{stage.label}</span>
                                     </div>
                                     <span className="kanban-count">{items.length}</span>
                                 </div>
                                 <div className="kanban-column-body">
                                     {items.map(w => (
-                                        <div key={w.id} className="kanban-card" onClick={() => { setEditItem(w); setShowModal(true); }}>
-                                            <div className="kanban-card-title">{w.title}</div>
-                                            <div style={{ display: 'flex', gap: 'var(--space-sm)', marginTop: 'var(--space-sm)', flexWrap: 'wrap' }}>
-                                                <StatusBadge status={w.workshopType} map={typeMap} />
-                                            </div>
-                                            <div className="kanban-card-meta">
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                                    <Calendar style={{ width: 12, height: 12 }} />
-                                                    {new Date(w.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                                                </span>
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                                    <MapPin style={{ width: 12, height: 12 }} />
-                                                    {w.location}
-                                                </span>
-                                            </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'var(--space-sm)', fontSize: 12, color: 'var(--text-muted)' }}>
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Users style={{ width: 12, height: 12 }} />{w.attendeeCount ?? 0}/{w.maxCapacity || '—'}</span>
-                                                <span>{getStaffName(w.facilitatorId)}</span>
-                                            </div>
-                                            {col.key !== 'Scheduled' ? null : (
-                                                <div style={{ display: 'flex', gap: 'var(--space-xs)', marginTop: 'var(--space-sm)' }}>
-                                                    <button className="btn btn-ghost btn-sm" style={{ flex: 1, fontSize: 11 }} onClick={e => { e.stopPropagation(); moveWorkshop(w.id, 'Completed'); }}>✓ Complete</button>
-                                                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={e => { e.stopPropagation(); moveWorkshop(w.id, 'Cancelled'); }}>Cancel</button>
-                                                    <button className="btn btn-ghost btn-sm" onClick={e => handleDelete(w.id, e)}><X style={{ width: 12, height: 12 }} /></button>
+                                        <div
+                                            key={w.id}
+                                            className="kanban-card workshop-kanban-card"
+                                            draggable
+                                            onDragStart={(e) => handleDragStart(e, w)}
+                                            onDragEnd={handleDragEnd}
+                                            onClick={() => openModal(w)}
+                                        >
+                                            {w.imageUrl && (
+                                                <div className="kanban-card-image-wrapper">
+                                                    <img src={w.imageUrl} alt="" className="kanban-card-image" />
                                                 </div>
                                             )}
+                                            <div className="kanban-card-title">{w.title}</div>
+
+                                            {getCompanyName(w.companyId) && (
+                                                <div className="kanban-card-detail">
+                                                    <Building2 style={{ width: 12, height: 12, flexShrink: 0 }} />
+                                                    <span>{getCompanyName(w.companyId)}</span>
+                                                </div>
+                                            )}
+                                            {getContactName(w.contactId) && (
+                                                <div className="kanban-card-detail">
+                                                    <User style={{ width: 12, height: 12, flexShrink: 0 }} />
+                                                    <span>{getContactName(w.contactId)}</span>
+                                                </div>
+                                            )}
+
+                                            <div className="kanban-card-meta">
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                    <Users style={{ width: 12, height: 12 }} />
+                                                    {getStaffName(w.facilitatorId)}
+                                                </span>
+                                                {w.value && (
+                                                    <span className="kanban-card-value">
+                                                        <PoundSterling style={{ width: 11, height: 11 }} />
+                                                        {parseFloat(w.value).toLocaleString()}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     ))}
-                                    {items.length === 0 && <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-lg)', fontSize: 13 }}>No workshops</div>}
+                                    {items.length === 0 && (
+                                        <div className="kanban-empty">Drop workshops here</div>
+                                    )}
                                 </div>
                             </div>
                         );
@@ -125,86 +260,146 @@ export default function WorkshopTracker() {
                 </div>
             </div>
 
-            {showModal && (
-                <Modal onClose={() => { setShowModal(false); setEditItem(null); }} title={editItem ? 'Edit Workshop' : 'New Workshop'} large>
-                    <form onSubmit={handleSave}>
-                        <div className="modal-body">
+            {/* Add/Edit Workshop Modal */}
+            <Modal isOpen={showModal} onClose={closeModal} title={editItem ? 'Edit Workshop' : 'New Workshop'}>
+                <form onSubmit={handleSave}>
+                    <div className="modal-body">
+                        <div className="form-group">
+                            <label className="form-label">Workshop Title</label>
+                            <input className="form-input" name="title" defaultValue={editItem?.title} required />
+                        </div>
+                        <div className="form-row">
                             <div className="form-group">
-                                <label className="form-label">Workshop Title</label>
-                                <input className="form-input" name="title" defaultValue={editItem?.title} required />
-                            </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">Type</label>
-                                    <select className="form-select" name="workshopType" defaultValue={editItem?.workshopType || 'Awareness'}>
-                                        <option>Awareness</option><option>Prevention</option><option>Training</option>
-                                    </select>
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">Status</label>
-                                    <select className="form-select" name="status" defaultValue={editItem?.status || 'Scheduled'}>
-                                        <option>Scheduled</option><option>Completed</option><option>Cancelled</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">Start Date & Time</label>
-                                    <input className="form-input" name="date" type="datetime-local" defaultValue={editItem?.date ? editItem.date.slice(0, 16) : ''} required />
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">End Time</label>
-                                    <input className="form-input" name="endTime" type="datetime-local" defaultValue={editItem?.endTime ? editItem.endTime.slice(0, 16) : ''} />
-                                </div>
-                            </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">Organisation</label>
-                                    <select className="form-select" name="companyId" defaultValue={editItem?.companyId || ''}>
-                                        <option value="">Select…</option>
-                                        {state.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                    </select>
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">Facilitator</label>
-                                    <select className="form-select" name="facilitatorId" defaultValue={editItem?.facilitatorId || ''}>
-                                        <option value="">Select…</option>
-                                        {staff.map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">Location</label>
-                                    <input className="form-input" name="location" defaultValue={editItem?.location} />
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">Capacity</label>
-                                    <input className="form-input" name="maxCapacity" type="number" defaultValue={editItem?.maxCapacity} />
-                                </div>
-                            </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">Attendee Count</label>
-                                    <input className="form-input" name="attendeeCount" type="number" defaultValue={editItem?.attendeeCount} />
-                                </div>
+                                <label className="form-label">Stage</label>
+                                <select className="form-select" name="status" defaultValue={editItem ? getStage(editItem) : 'Initial Conversation'}>
+                                    {STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                                </select>
                             </div>
                             <div className="form-group">
-                                <label className="form-label">Notes</label>
-                                <textarea className="form-textarea" name="notes" defaultValue={editItem?.notes} />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Feedback</label>
-                                <textarea className="form-textarea" name="feedback" defaultValue={editItem?.feedback} placeholder="Post-workshop feedback…" />
+                                <label className="form-label">Type</label>
+                                <select className="form-select" name="workshopType" defaultValue={editItem?.workshopType || 'Awareness'}>
+                                    <option>Awareness</option><option>Prevention</option><option>Training</option>
+                                </select>
                             </div>
                         </div>
-                        <div className="modal-footer">
-                            <button type="button" className="btn btn-secondary" onClick={() => { setShowModal(false); setEditItem(null); }}>Cancel</button>
-                            <button type="submit" className="btn btn-primary">{editItem ? 'Save Changes' : 'Add Workshop'}</button>
+                        {/* Image Upload Area */}
+                        <div className="form-group">
+                            <label className="form-label">
+                                <ImagePlus style={{ width: 14, height: 14, display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />
+                                Cover Image
+                            </label>
+                            {imageUrl ? (
+                                <div className="image-upload-preview">
+                                    <img src={imageUrl} alt="Workshop cover" />
+                                    <div className="image-upload-preview-actions">
+                                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => fileInputRef.current?.click()}>
+                                            Change
+                                        </button>
+                                        <button type="button" className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={handleRemoveImage}>
+                                            <Trash2 style={{ width: 13, height: 13 }} /> Remove
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div
+                                    className="image-upload-zone"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('drag-active'); }}
+                                    onDragLeave={(e) => e.currentTarget.classList.remove('drag-active')}
+                                    onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove('drag-active'); handleImageUpload(e.dataTransfer.files[0]); }}
+                                >
+                                    {uploading ? (
+                                        <Loader2 className="image-upload-spinner" />
+                                    ) : (
+                                        <>
+                                            <UploadCloud style={{ width: 28, height: 28, color: 'var(--text-muted)' }} />
+                                            <span className="image-upload-text">Click or drag an image to upload</span>
+                                            <span className="image-upload-hint">JPG, PNG or WebP · Max 5MB</span>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                style={{ display: 'none' }}
+                                onChange={(e) => handleImageUpload(e.target.files[0])}
+                            />
                         </div>
-                    </form>
-                </Modal>
-            )}
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label className="form-label">Organisation</label>
+                                <select className="form-select" name="companyId" defaultValue={editItem?.companyId || ''}>
+                                    <option value="">Select…</option>
+                                    {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Contact</label>
+                                <select className="form-select" name="contactId" defaultValue={editItem?.contactId || ''}>
+                                    <option value="">Select…</option>
+                                    {contacts.map(c => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label className="form-label">Assigned Member</label>
+                                <select className="form-select" name="facilitatorId" defaultValue={editItem?.facilitatorId || ''}>
+                                    <option value="">Select…</option>
+                                    {staff.map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Value (£)</label>
+                                <input className="form-input" name="value" type="number" step="0.01" placeholder="0.00" defaultValue={editItem?.value || ''} />
+                            </div>
+                        </div>
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label className="form-label">Start Date & Time</label>
+                                <input className="form-input" name="date" type="datetime-local" defaultValue={editItem?.date ? editItem.date.slice(0, 16) : ''} />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">End Time</label>
+                                <input className="form-input" name="endTime" type="datetime-local" defaultValue={editItem?.endTime ? editItem.endTime.slice(0, 16) : ''} />
+                            </div>
+                        </div>
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label className="form-label">Location</label>
+                                <input className="form-input" name="location" defaultValue={editItem?.location} />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Capacity</label>
+                                <input className="form-input" name="maxCapacity" type="number" defaultValue={editItem?.maxCapacity} />
+                            </div>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Attendee Count</label>
+                            <input className="form-input" name="attendeeCount" type="number" defaultValue={editItem?.attendeeCount} />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Notes</label>
+                            <textarea className="form-textarea" name="notes" defaultValue={editItem?.notes} />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Feedback</label>
+                            <textarea className="form-textarea" name="feedback" defaultValue={editItem?.feedback} placeholder="Post-workshop feedback…" />
+                        </div>
+                    </div>
+                    <div className="modal-footer">
+                        {editItem && (
+                            <button type="button" className="btn btn-ghost" style={{ color: 'var(--danger)', marginRight: 'auto' }} onClick={e => { handleDelete(editItem.id, e); closeModal(); }}>
+                                <Trash2 style={{ width: 14, height: 14 }} /> Delete
+                            </button>
+                        )}
+                        <button type="button" className="btn btn-secondary" onClick={closeModal}>Cancel</button>
+                        <button type="submit" className="btn btn-primary">{editItem ? 'Save Changes' : 'Add Workshop'}</button>
+                    </div>
+                </form>
+            </Modal>
         </>
     );
 }
