@@ -2692,3 +2692,36 @@ a:hover {
   color: var(--text-muted) !important;
   font-style: normal !important;
 }
+
+/* ============================
+   DATETIME PICKER STYLING
+   ============================ */
+
+/* Force dark theme for the native calendar popup */
+input[type="datetime-local"] {
+  color-scheme: dark;
+}
+
+/* Style the calendar icon button */
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity var(--transition-fast);
+  filter: invert(1);
+  /* Ensure it's white on dark backgrounds */
+}
+
+[data-theme="light"] input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: none;
+}
+
+input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+/* Base styling for datetime inputs */
+.form-input[type="datetime-local"] {
+  position: relative;
+  /* Add padding to ensure text doesn't overlap with the picker indicator */
+  padding-right: 32px;
+}

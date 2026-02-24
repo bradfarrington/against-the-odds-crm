@@ -22,6 +22,8 @@ const ACTIONS = {
     UPDATE_SEEKER: 'UPDATE_SEEKER',
     DELETE_SEEKER: 'DELETE_SEEKER',
     ADD_COACHING_SESSION: 'ADD_COACHING_SESSION',
+    UPDATE_COACHING_SESSION: 'UPDATE_COACHING_SESSION',
+    DELETE_COACHING_SESSION: 'DELETE_COACHING_SESSION',
     // Campaigns
     ADD_CAMPAIGN: 'ADD_CAMPAIGN',
     UPDATE_CAMPAIGN: 'UPDATE_CAMPAIGN',
@@ -141,12 +143,41 @@ function dataReducer(state, action) {
         case ACTIONS.ADD_SEEKER: return crudLocal(state, 'recoverySeekers', { crud: 'ADD', payload: action.payload });
         case ACTIONS.UPDATE_SEEKER: return crudLocal(state, 'recoverySeekers', { crud: 'UPDATE', payload: action.payload });
         case ACTIONS.DELETE_SEEKER: return crudLocal(state, 'recoverySeekers', { crud: 'DELETE', payload: action.payload });
-        case ACTIONS.ADD_COACHING_SESSION:
+        case ACTIONS.ADD_COACHING_SESSION: {
+            const seekerId = action.payload.seekerId || action.payload.seeker_id;
+            const sessionData = action.payload.session || action.payload;
+            return {
+                ...state,
+                recoverySeekers: state.recoverySeekers.map(s =>
+                    s.id === seekerId
+                        ? { ...s, coachingSessions: [...(s.coachingSessions || []), sessionData] }
+                        : s
+                ),
+            };
+        }
+        case ACTIONS.UPDATE_COACHING_SESSION:
             return {
                 ...state,
                 recoverySeekers: state.recoverySeekers.map(s =>
                     s.id === action.payload.seekerId
-                        ? { ...s, coachingSessions: [...s.coachingSessions, action.payload.session] }
+                        ? {
+                            ...s,
+                            coachingSessions: s.coachingSessions.map(cs =>
+                                cs.id === action.payload.session.id ? action.payload.session : cs
+                            )
+                        }
+                        : s
+                ),
+            };
+        case ACTIONS.DELETE_COACHING_SESSION:
+            return {
+                ...state,
+                recoverySeekers: state.recoverySeekers.map(s =>
+                    s.id === action.payload.seekerId
+                        ? {
+                            ...s,
+                            coachingSessions: s.coachingSessions.filter(cs => cs.id !== action.payload.sessionId)
+                        }
                         : s
                 ),
             };
@@ -256,6 +287,8 @@ const apiMap = {
     [ACTIONS.UPDATE_SEEKER]: (p) => api.modifySeeker(p.id, p),
     [ACTIONS.DELETE_SEEKER]: (p) => api.removeSeeker(p),
     [ACTIONS.ADD_COACHING_SESSION]: (p) => api.createCoachingSession({ seekerId: p.seekerId, ...p.session }),
+    [ACTIONS.UPDATE_COACHING_SESSION]: (p) => api.modifyCoachingSession(p.session.id, p.session),
+    [ACTIONS.DELETE_COACHING_SESSION]: (p) => api.removeCoachingSession(p.sessionId),
 
     [ACTIONS.ADD_CAMPAIGN]: (p) => api.createCampaign(p),
     [ACTIONS.UPDATE_CAMPAIGN]: (p) => api.modifyCampaign(p.id, p),

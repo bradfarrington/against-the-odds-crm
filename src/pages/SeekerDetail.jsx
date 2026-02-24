@@ -9,14 +9,16 @@ import {
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
 import EmailTimeline from '../components/EmailTimeline';
+import CoachingSessionModal from '../components/CoachingSessionModal';
 
 export default function SeekerDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
     const { state, dispatch } = useData();
     const [showSessionModal, setShowSessionModal] = useState(false);
+    const [isEditingSession, setIsEditingSession] = useState(false);
+    const [editingSession, setEditingSession] = useState(null);
     const [showSubstanceModal, setShowSubstanceModal] = useState(false);
-    const [sessionForm, setSessionForm] = useState({ date: '', notes: '', progressRating: 5 });
     const [substanceForm, setSubstanceForm] = useState({ substance: '', frequency: '', duration: '', notes: '' });
     const [activeTab, setActiveTab] = useState('overview');
 
@@ -42,17 +44,22 @@ export default function SeekerDetail() {
         return '#22C55E';
     };
 
-    const handleAddSession = (e) => {
-        e.preventDefault();
-        dispatch({
-            type: ACTIONS.ADD_COACHING_SESSION,
-            payload: {
-                seekerId: id,
-                session: { ...sessionForm, progressRating: parseInt(sessionForm.progressRating) }
-            }
-        });
-        setSessionForm({ date: '', notes: '', progressRating: 5 });
-        setShowSessionModal(false);
+    const handleEditSession = (session) => {
+        setEditingSession(session);
+        setIsEditingSession(true);
+        setShowSessionModal(true);
+    };
+
+    const handleDeleteSession = (sessionId) => {
+        if (window.confirm("Are you sure you want to delete this session?")) {
+            dispatch({
+                type: ACTIONS.DELETE_COACHING_SESSION,
+                payload: {
+                    seekerId: id,
+                    sessionId: sessionId
+                }
+            });
+        }
     };
 
     const handleAddSubstance = (e) => {
@@ -265,59 +272,73 @@ export default function SeekerDetail() {
                 {/* Coaching Sessions Tab */}
                 {activeTab === 'coaching' && (
                     <div className="detail-sections fade-in-up">
-                        <div className="card">
-                            <div className="card-header">
-                                <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-                                    <FileText size={18} /> Coaching Sessions
-                                </h3>
-                                <button className="btn btn-primary btn-sm" onClick={() => setShowSessionModal(true)}>
-                                    <Plus size={14} /> Log Session
-                                </button>
-                            </div>
-                            {seeker.coachingSessions && seeker.coachingSessions.length > 0 ? (
-                                <div className="card-body">
-                                    <div className="activity-list">
-                                        {[...seeker.coachingSessions].reverse().map((session, i) => (
-                                            <div key={i} className="activity-item" style={{ padding: 'var(--space-md) 0' }}>
-                                                <div className="activity-icon" style={{
-                                                    background: session.progressRating >= 6 ? 'var(--success-bg)' : session.progressRating >= 4 ? 'var(--warning-bg)' : 'var(--danger-bg)',
-                                                    color: session.progressRating >= 6 ? 'var(--success)' : session.progressRating >= 4 ? 'var(--warning)' : 'var(--danger)',
-                                                }}>
-                                                    <Star size={16} />
-                                                </div>
-                                                <div className="activity-content" style={{ flex: 1 }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-                                                            <Calendar size={13} style={{ color: 'var(--text-muted)' }} />
-                                                            <span style={{ fontSize: 13, fontWeight: 500 }}>{session.date}</span>
-                                                        </div>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Progress:</span>
-                                                            <div className="progress-bar" style={{ width: 80, height: 6 }}>
-                                                                <div className="progress-bar-fill" style={{
-                                                                    width: `${session.progressRating * 10}%`,
-                                                                    background: session.progressRating >= 6 ? 'var(--success)' : session.progressRating >= 4 ? 'var(--warning)' : 'var(--danger)'
-                                                                }} />
-                                                            </div>
-                                                            <span style={{ fontSize: 12, fontWeight: 600 }}>{session.progressRating}/10</span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="activity-text" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{session.notes}</div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="card-body">
-                                    <div className="empty-state" style={{ padding: 'var(--space-xl)' }}>
-                                        <FileText />
-                                        <h3>No coaching sessions</h3>
-                                        <p>Log the first coaching session for this recovery seeker</p>
-                                    </div>
-                                </div>
-                            )}
+                        <div className="section-header">
+                            <h3>Coaching Sessions</h3>
+                            <button className="btn btn-primary btn-sm" onClick={() => {
+                                setEditingSession(null);
+                                setIsEditingSession(false);
+                                setShowSessionModal(true);
+                            }}>
+                                <Plus size={14} /> Log Session
+                            </button>
                         </div>
+                        {seeker.coachingSessions && seeker.coachingSessions.length > 0 ? (
+                            <div className="card-body">
+                                <div className="activity-list">
+                                    {[...seeker.coachingSessions].reverse().map((session, i) => (
+                                        <div key={i} className="activity-item" style={{ padding: 'var(--space-md) 0' }}>
+                                            <div className="activity-icon" style={{
+                                                background: session.progressRating >= 6 ? 'var(--success-bg)' : session.progressRating >= 4 ? 'var(--warning-bg)' : 'var(--danger-bg)',
+                                                color: session.progressRating >= 6 ? 'var(--success)' : session.progressRating >= 4 ? 'var(--warning)' : 'var(--danger)',
+                                            }}>
+                                                <Star size={16} />
+                                            </div>
+                                            <div className="activity-content" style={{ flex: 1 }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                                                        <Calendar size={13} style={{ color: 'var(--text-muted)' }} />
+                                                        <span style={{ fontSize: 13, fontWeight: 500 }}>
+                                                            {session.date ? new Date(session.date).toLocaleString('en-GB', {
+                                                                weekday: 'short',
+                                                                day: '2-digit',
+                                                                month: 'short',
+                                                                year: 'numeric',
+                                                                hour: '2-digit',
+                                                                minute: '2-digit',
+                                                                hour12: false
+                                                            }).replace(/,/g, '') : 'No Date Set'}
+                                                        </span>
+                                                    </div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Progress:</span>
+                                                        <div className="progress-bar" style={{ width: 80, height: 6 }}>
+                                                            <div className="progress-bar-fill" style={{
+                                                                width: `${session.progressRating * 10}%`,
+                                                                background: session.progressRating >= 6 ? 'var(--success)' : session.progressRating >= 4 ? 'var(--warning)' : 'var(--danger)'
+                                                            }} />
+                                                        </div>
+                                                        <span style={{ fontSize: 12, fontWeight: 600 }}>{session.progressRating}/10</span>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: 'var(--space-xs)', marginLeft: 'var(--space-md)' }}>
+                                                        <button className="btn btn-ghost btn-sm" onClick={() => handleEditSession(session)}>Edit</button>
+                                                        <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => handleDeleteSession(session.id)}>Delete</button>
+                                                    </div>
+                                                </div>
+                                                <div className="activity-text" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{session.notes}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="card-body">
+                                <div className="empty-state" style={{ padding: 'var(--space-xl)' }}>
+                                    <FileText />
+                                    <h3>No coaching sessions</h3>
+                                    <p>Log the first coaching session for this recovery seeker</p>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -329,31 +350,16 @@ export default function SeekerDetail() {
                 )}
             </div>
 
-            {/* Add Session Modal */}
-            <Modal isOpen={showSessionModal} onClose={() => setShowSessionModal(false)} title="Log Coaching Session">
-                <form onSubmit={handleAddSession}>
-                    <div className="modal-body">
-                        <div className="form-row">
-                            <div className="form-group">
-                                <label className="form-label">Date *</label>
-                                <input className="form-input" type="date" required value={sessionForm.date} onChange={e => setSessionForm(prev => ({ ...prev, date: e.target.value }))} />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Progress Rating (1-10)</label>
-                                <input className="form-input" type="number" min="1" max="10" value={sessionForm.progressRating} onChange={e => setSessionForm(prev => ({ ...prev, progressRating: e.target.value }))} />
-                            </div>
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">Session Notes *</label>
-                            <textarea className="form-textarea" required rows={4} value={sessionForm.notes} onChange={e => setSessionForm(prev => ({ ...prev, notes: e.target.value }))} placeholder="Describe the session, progress, and any actions..." />
-                        </div>
-                    </div>
-                    <div className="modal-footer">
-                        <button type="button" className="btn btn-secondary" onClick={() => setShowSessionModal(false)}>Cancel</button>
-                        <button type="submit" className="btn btn-primary">Log Session</button>
-                    </div>
-                </form>
-            </Modal>
+            <CoachingSessionModal
+                isOpen={showSessionModal}
+                onClose={() => {
+                    setShowSessionModal(false);
+                    setIsEditingSession(false);
+                    setEditingSession(null);
+                }}
+                seekerId={id}
+                session={isEditingSession ? editingSession : null}
+            />
 
             {/* Add Substance Modal */}
             <Modal isOpen={showSubstanceModal} onClose={() => setShowSubstanceModal(false)} title="Add Substance Use Record">

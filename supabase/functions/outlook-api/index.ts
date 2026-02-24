@@ -6,12 +6,12 @@ const corsHeaders = {
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
     try {
         const payload = await req.json()
-        const { action, userId, linkedId, linkedType, toRecipients, subject, bodyHtml, messageId, ccRecipients, bccRecipients } = payload
+        const { action, userId, linkedId, linkedType, toRecipients, subject, bodyHtml, messageId, ccRecipients, bccRecipients, eventId, startDateTime, endDateTime, locationStr, isAllDay } = payload
 
         if (!userId) return new Response(JSON.stringify({ error: 'User ID is required' }), { status: 400, headers: corsHeaders })
 
@@ -95,6 +95,46 @@ serve(async (req) => {
 
             graphRes = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${draft.id}/send`, {
                 method: 'POST',
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            })
+        } else if (action === 'createEvent' || action === 'updateEvent') {
+            const eventPayload: any = {
+                subject,
+                body: { contentType: 'HTML', content: bodyHtml || '' },
+                start: { dateTime: startDateTime, timeZone: 'UTC' },
+                end: { dateTime: endDateTime, timeZone: 'UTC' },
+                location: { displayName: locationStr || '' },
+                isAllDay: isAllDay || false,
+                attendees: toRecipients?.map((email: string) => ({ emailAddress: { address: email }, type: 'required' })) || []
+            }
+
+            if (linkedId) {
+                eventPayload.extensions = [
+                    {
+                        "@odata.type": "microsoft.graph.openTypeExtension",
+                        "extensionName": "org.againsttheodds.crm",
+                        "linkedId": linkedId,
+                        "linkedType": linkedType
+                    }
+                ]
+            }
+
+            if (action === 'createEvent') {
+                graphRes = await fetch('https://graph.microsoft.com/v1.0/me/events', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(eventPayload)
+                })
+            } else {
+                graphRes = await fetch(`https://graph.microsoft.com/v1.0/me/events/${eventId}`, {
+                    method: 'PATCH',
+                    headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(eventPayload)
+                })
+            }
+        } else if (action === 'deleteEvent') {
+            graphRes = await fetch(`https://graph.microsoft.com/v1.0/me/events/${eventId}`, {
+                method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${accessToken}` }
             })
         }

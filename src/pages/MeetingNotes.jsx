@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { Plus, Search, NotebookPen, X } from 'lucide-react';
 import Modal from '../components/Modal';
+import DateTimePicker from '../components/DateTimePicker';
 import StatusBadge from '../components/StatusBadge';
 
 const typeMap = { 'Face to Face': 'success', Remote: 'info' };
@@ -189,7 +190,7 @@ function MeetingModal({ editItem, onClose, onSave, companies, contacts, staff })
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">Date & Time</label>
-                            <input className="form-input" name="date" type="datetime-local" defaultValue={editItem?.date ? editItem.date.slice(0, 16) : ''} required />
+                            <DateTimePicker name="date" value={editItem?.date ? editItem.date.slice(0, 16) : ''} required />
                         </div>
                         <div className="form-group">
                             <label className="form-label">Type</label>

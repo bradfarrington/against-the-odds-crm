@@ -126,6 +126,13 @@ serve(async (req) => {
           resource: "me/mailFolders('sentitems')/messages",
           expirationDateTime,
           clientState: userId
+        },
+        {
+          changeType: 'created,updated,deleted',
+          notificationUrl: webhookUrl,
+          resource: "me/events",
+          expirationDateTime,
+          clientState: userId
         }
       ]
 

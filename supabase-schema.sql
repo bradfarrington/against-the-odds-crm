@@ -445,3 +445,37 @@ begin
   end loop;
 end;
 $$;
+
+-- ============================================
+-- 22. APPOINTMENTS (Calendar)
+-- ============================================
+create table if not exists appointments (
+  id uuid primary key default uuid_generate_v4(),
+  title text not null,
+  description text default '',
+  start_time timestamptz not null,
+  end_time timestamptz not null,
+  location text default '',
+  user_id uuid references staff(id) on delete set null,
+  contact_id uuid references contacts(id) on delete set null,
+  recovery_seeker_id uuid references recovery_seekers(id) on delete set null,
+  graph_event_id text unique,
+  is_all_day boolean default false,
+  status text default 'Scheduled',
+  created_at timestamptz default now()
+);
+
+alter table appointments enable row level security;
+
+do $$
+begin
+  if not exists (
+      select 1 from pg_policies 
+      where schemaname = 'public' 
+      and tablename = 'appointments' 
+      and policyname = 'Authenticated full access'
+  ) then
+      create policy "Authenticated full access" on appointments for all to authenticated using (true) with check (true);
+  end if;
+end
+$$;

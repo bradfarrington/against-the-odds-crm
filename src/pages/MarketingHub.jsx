@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useData, ACTIONS } from '../context/DataContext';
 import {
-    Megaphone, Plus, Mail, Send, Eye, MousePointerClick,
-    BarChart3, FileText, Users2,
+    Megaphone, Plus, Mail, Send, Eye, Calendar as CalendarIcon, Target, Users, Settings, Clock, Play
 } from 'lucide-react';
+import DateTimePicker from '../components/DateTimePicker';
 import SearchBar from '../components/SearchBar';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
@@ -105,10 +105,10 @@ export default function MarketingHub() {
 
                 {/* Tabs */}
                 <div className="tabs">
-                    <button className={`tab ${activeTab === 'campaigns' ? 'active' : ''}`} onClick={() => setActiveTab('campaigns')}>
+                    <button className={`tab ${activeTab === 'campaigns' ? 'active' : ''} `} onClick={() => setActiveTab('campaigns')}>
                         Campaigns
                     </button>
-                    <button className={`tab ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>
+                    <button className={`tab ${activeTab === 'analytics' ? 'active' : ''} `} onClick={() => setActiveTab('analytics')}>
                         Analytics
                     </button>
                 </div>
@@ -231,7 +231,7 @@ export default function MarketingHub() {
                                             outerRadius={100}
                                             paddingAngle={5}
                                             dataKey="value"
-                                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}% `}
                                         >
                                             {pieData.map((entry, idx) => (
                                                 <Cell key={idx} fill={entry.color} />
@@ -287,7 +287,7 @@ export default function MarketingHub() {
                         </div>
                         <div className="form-group">
                             <label className="form-label">Scheduled Date</label>
-                            <input className="form-input" type="datetime-local" value={form.scheduledDate} onChange={e => updateForm('scheduledDate', e.target.value)} />
+                            <DateTimePicker name="scheduledDate" value={form.scheduledDate} onChange={e => updateForm('scheduledDate', e.target.value)} />
                         </div>
                         <div className="form-group">
                             <label className="form-label">Description</label>

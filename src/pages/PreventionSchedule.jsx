@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useData } from '../context/DataContext';
 import { Plus, Search, Calendar, MapPin, Users, X } from 'lucide-react';
 import Modal from '../components/Modal';
+import DateTimePicker from '../components/DateTimePicker';
 import StatusBadge from '../components/StatusBadge';
 
 const statusMap = { Scheduled: 'info', Completed: 'success', Cancelled: 'danger' };
@@ -171,11 +172,11 @@ export default function PreventionSchedule() {
                             <div className="form-row">
                                 <div className="form-group">
                                     <label className="form-label">Start Date & Time</label>
-                                    <input className="form-input" name="date" type="datetime-local" defaultValue={editItem?.date ? editItem.date.slice(0, 16) : ''} required />
+                                    <DateTimePicker name="date" value={editItem?.date ? editItem.date.slice(0, 16) : ''} required />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">End Time</label>
-                                    <input className="form-input" name="endTime" type="datetime-local" defaultValue={editItem?.endTime ? editItem.endTime.slice(0, 16) : ''} />
+                                    <DateTimePicker name="endTime" value={editItem?.endTime ? editItem.endTime.slice(0, 16) : ''} />
                                 </div>
                             </div>
                             <div className="form-row">

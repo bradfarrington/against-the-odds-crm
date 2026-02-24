@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
+import DateTimePicker from '../components/DateTimePicker';
 
 const typeMap = { 'Face to Face': 'success', Remote: 'info' };
 
@@ -285,7 +286,7 @@ function EditMeetingModal({ meeting, onClose, onSave, companies, contacts, staff
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">Date & Time</label>
-                            <input className="form-input" name="date" type="datetime-local" defaultValue={meeting.date ? meeting.date.slice(0, 16) : ''} required />
+                            <DateTimePicker name="date" value={meeting.date ? meeting.date.slice(0, 16) : ''} required />
                         </div>
                         <div className="form-group">
                             <label className="form-label">Type</label>

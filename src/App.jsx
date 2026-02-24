@@ -7,6 +7,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Companies from './pages/Companies';
 import CompanyDetail from './pages/CompanyDetail';
+import Calendar from './pages/Calendar';
 import Contacts from './pages/Contacts';
 import ContactDetail from './pages/ContactDetail';
 import RecoverySeekers from './pages/RecoverySeekers';
@@ -55,6 +56,7 @@ function AppRoutes() {
         <Route path="/" element={<Layout />}>
           <Route index element={<Dashboard />} />
           {/* Core */}
+          <Route path="calendar" element={<Calendar />} />
           <Route path="contacts" element={<Contacts />} />
           <Route path="contacts/:id" element={<ContactDetail />} />
           <Route path="companies" element={<Companies />} />

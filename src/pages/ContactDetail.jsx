@@ -9,6 +9,7 @@ import {
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
 import EmailTimeline from '../components/EmailTimeline';
+import AppointmentList from '../components/AppointmentList';
 
 const SOCIAL_LINKS = [
     { key: 'linkedinUrl', Icon: Linkedin, label: 'LinkedIn', color: '#0A66C2' },
@@ -147,6 +148,9 @@ export default function ContactDetail() {
                     <button className={`tab ${activeTab === 'workshops' ? 'active' : ''}`} onClick={() => setActiveTab('workshops')}>
                         Workshops
                         {workshops.length > 0 && <span className="badge badge-neutral" style={{ marginLeft: 6 }}>{workshops.length}</span>}
+                    </button>
+                    <button className={`tab ${activeTab === 'appointments' ? 'active' : ''}`} onClick={() => setActiveTab('appointments')}>
+                        Appointments
                     </button>
                     <button className={`tab ${activeTab === 'emails' ? 'active' : ''}`} onClick={() => setActiveTab('emails')}>
                         Emails
@@ -471,6 +475,13 @@ export default function ContactDetail() {
                                 </div>
                             )}
                         </div>
+                    </div>
+                )}
+
+                {/* Appointments Tab */}
+                {activeTab === 'appointments' && (
+                    <div className="detail-sections">
+                        <AppointmentList linkedId={contact.id} linkedType="contact" />
                     </div>
                 )}
 

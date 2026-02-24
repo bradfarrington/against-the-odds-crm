@@ -9,6 +9,7 @@ import {
     Users,
     CheckSquare,
     NotebookPen,
+    CalendarDays,
     Columns3,
     FolderOpen,
     Receipt,
@@ -32,6 +33,7 @@ const navSections = [
     {
         label: 'Core',
         items: [
+            { to: '/calendar', icon: <CalendarDays />, label: 'Calendar' },
             { to: '/contacts', icon: <Users />, label: 'Contacts' },
             { to: '/companies', icon: <Building2 />, label: 'Companies' },
             { to: '/tasks', icon: <CheckSquare />, label: 'Tasks' },

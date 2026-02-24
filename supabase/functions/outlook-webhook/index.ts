@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { getSupabase, getValidGraphToken } from '../_shared/outlook.ts'
 
-serve(async (req) => {
+serve(async (req: Request) => {
     const url = new URL(req.url)
     const validationToken = url.searchParams.get('validationToken')
 
@@ -20,8 +20,63 @@ serve(async (req) => {
             const messageId = notification.resourceData?.id
             if (!userId || !messageId) continue;
 
+            const resource = notification.resource || ''
+            const isEvent = resource.toLowerCase().includes('events')
+            const isDeleted = notification.changeType === 'deleted'
+
             try {
                 const accessToken = await getValidGraphToken(userId)
+
+                if (isEvent) {
+                    if (isDeleted) {
+                        await supabase.from('appointments').delete().eq('graph_event_id', messageId)
+                        continue;
+                    }
+
+                    const graphRes = await fetch(`https://graph.microsoft.com/v1.0/me/events/${messageId}?$select=subject,bodyPreview,start,end,location,attendees,isAllDay,id`, {
+                        headers: { 'Authorization': `Bearer ${accessToken}` }
+                    })
+                    if (!graphRes.ok) continue;
+                    const event = await graphRes.json()
+
+                    const attendees = event.attendees?.map((a: any) => a.emailAddress?.address) || []
+
+                    let matchedContactId = null
+                    let matchedSeekerId = null
+
+                    for (const email of attendees) {
+                        if (!email) continue;
+                        const { data: seeker } = await supabase.from('recovery_seekers').select('id').ilike('email', email).maybeSingle()
+                        if (seeker) {
+                            matchedSeekerId = seeker.id
+                            break
+                        }
+                        const { data: contact } = await supabase.from('contacts').select('id').ilike('email', email).maybeSingle()
+                        if (contact) {
+                            matchedContactId = contact.id
+                            break
+                        }
+                    }
+
+                    await supabase.from('appointments').upsert({
+                        title: event.subject || '(No Title)',
+                        description: event.bodyPreview || '',
+                        start_time: event.start?.dateTime,
+                        end_time: event.end?.dateTime,
+                        location: event.location?.displayName || '',
+                        user_id: userId,
+                        contact_id: matchedContactId,
+                        recovery_seeker_id: matchedSeekerId,
+                        graph_event_id: event.id,
+                        is_all_day: event.isAllDay || false,
+                        status: 'Scheduled'
+                    }, { onConflict: 'graph_event_id' })
+
+                    continue;
+                }
+
+                // Skip deleted mails for now
+                if (isDeleted) continue;
 
                 // Fetch message details
                 const graphRes = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${messageId}?$select=subject,body,sender,toRecipients,receivedDateTime,conversationId,hasAttachments`, {

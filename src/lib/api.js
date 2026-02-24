@@ -99,6 +99,8 @@ export const removeSubstanceUse = (id) => deleteRow('substance_use', id);
 
 // Coaching Sessions
 export const createCoachingSession = (d) => insertRow('coaching_sessions', d);
+export const modifyCoachingSession = (id, d) => updateRow('coaching_sessions', id, d);
+export const removeCoachingSession = (id) => deleteRow('coaching_sessions', id);
 
 // Campaigns
 export const fetchCampaigns = () => fetchAll('campaigns');
