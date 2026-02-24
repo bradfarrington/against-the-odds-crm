@@ -138,8 +138,13 @@ export default function Settings() {
                                     {isChecking ? (
                                         <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Checking...</span>
                                     ) : isOutlookConnected ? (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontSize: 13, fontWeight: 500 }}>
-                                            <CheckCircle size={16} /> Connected
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontSize: 13, fontWeight: 500 }}>
+                                                <CheckCircle size={16} /> Connected
+                                            </div>
+                                            <button className="btn btn-secondary btn-sm" onClick={handleConnectOutlook}>
+                                                <RotateCcw size={14} /> Reconnect
+                                            </button>
                                         </div>
                                     ) : (
                                         <button className="btn btn-primary" onClick={handleConnectOutlook}>

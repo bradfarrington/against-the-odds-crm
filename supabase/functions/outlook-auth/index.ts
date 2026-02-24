@@ -129,8 +129,11 @@ serve(async (req) => {
         }
       ]
 
+      let webhookStatus = 'success'
+      let webhookErrorDetails = ''
+
       for (const sub of subscriptions) {
-        await fetch('https://graph.microsoft.com/v1.0/subscriptions', {
+        const res = await fetch('https://graph.microsoft.com/v1.0/subscriptions', {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${tokenData.access_token}`,
@@ -138,6 +141,15 @@ serve(async (req) => {
           },
           body: JSON.stringify(sub)
         })
+        if (!res.ok) {
+          webhookStatus = 'failed'
+          webhookErrorDetails += await res.text() + ' | '
+        }
+      }
+
+      if (webhookStatus === 'failed') {
+        console.error('Webhook subscription failed:', webhookErrorDetails)
+        // Optionally, update the table to indicate webhook failure
       }
     }
 
