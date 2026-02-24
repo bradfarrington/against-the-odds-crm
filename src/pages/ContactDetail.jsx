@@ -8,13 +8,14 @@ import {
 } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
+import EmailTimeline from '../components/EmailTimeline';
 
 const SOCIAL_LINKS = [
-    { key: 'linkedinUrl',   Icon: Linkedin,  label: 'LinkedIn',    color: '#0A66C2' },
-    { key: 'twitterUrl',    Icon: Twitter,   label: 'X / Twitter', color: '#1DA1F2' },
-    { key: 'instagramUrl',  Icon: Instagram, label: 'Instagram',   color: '#E1306C' },
-    { key: 'facebookUrl',   Icon: Facebook,  label: 'Facebook',    color: '#1877F2' },
-    { key: 'websiteUrl',    Icon: Globe,     label: 'Website',     color: 'var(--primary)' },
+    { key: 'linkedinUrl', Icon: Linkedin, label: 'LinkedIn', color: '#0A66C2' },
+    { key: 'twitterUrl', Icon: Twitter, label: 'X / Twitter', color: '#1DA1F2' },
+    { key: 'instagramUrl', Icon: Instagram, label: 'Instagram', color: '#E1306C' },
+    { key: 'facebookUrl', Icon: Facebook, label: 'Facebook', color: '#1877F2' },
+    { key: 'websiteUrl', Icon: Globe, label: 'Website', color: 'var(--primary)' },
 ];
 
 export default function ContactDetail() {
@@ -71,11 +72,11 @@ export default function ContactDetail() {
 
     const openSocialModal = () => {
         setSocialForm({
-            linkedinUrl:  contact.linkedinUrl  || '',
-            twitterUrl:   contact.twitterUrl   || '',
+            linkedinUrl: contact.linkedinUrl || '',
+            twitterUrl: contact.twitterUrl || '',
             instagramUrl: contact.instagramUrl || '',
-            facebookUrl:  contact.facebookUrl  || '',
-            websiteUrl:   contact.websiteUrl   || '',
+            facebookUrl: contact.facebookUrl || '',
+            websiteUrl: contact.websiteUrl || '',
         });
         setShowSocialModal(true);
     };
@@ -146,6 +147,9 @@ export default function ContactDetail() {
                     <button className={`tab ${activeTab === 'workshops' ? 'active' : ''}`} onClick={() => setActiveTab('workshops')}>
                         Workshops
                         {workshops.length > 0 && <span className="badge badge-neutral" style={{ marginLeft: 6 }}>{workshops.length}</span>}
+                    </button>
+                    <button className={`tab ${activeTab === 'emails' ? 'active' : ''}`} onClick={() => setActiveTab('emails')}>
+                        Emails
                     </button>
                 </div>
 
@@ -467,6 +471,13 @@ export default function ContactDetail() {
                                 </div>
                             )}
                         </div>
+                    </div>
+                )}
+
+                {/* Emails Tab */}
+                {activeTab === 'emails' && (
+                    <div className="detail-sections">
+                        <EmailTimeline contactId={contact.id} contactEmail={contact.email} />
                     </div>
                 )}
             </div>

@@ -110,7 +110,35 @@ export const removeCampaign = (id) => deleteRow('campaigns', id);
 export const fetchStaff = () => fetchAll('staff');
 export const createStaffMember = (d) => insertRow('staff', d);
 export const modifyStaffMember = (id, d) => updateRow('staff', id, d);
-export const removeStaffMember = (id) => deleteRow('staff', id);
+export const removeStaffMember = async (id) => {
+    // Attempt edge function deletion (which deletes the auth user)
+    // If it fails because the user isn't logged in, or we are running locally without edge functions, fallback to DB delete.
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+
+        if (session && supabaseUrl) {
+            const res = await fetch(`${supabaseUrl}/functions/v1/admin-delete-user`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`
+                },
+                body: JSON.stringify({ userId: id })
+            });
+
+            if (!res.ok) {
+                console.warn('Edge function deletion failed, falling back to direct table deletion.');
+                await deleteRow('staff', id);
+            }
+        } else {
+            await deleteRow('staff', id);
+        }
+    } catch (e) {
+        console.warn('Fallback: direct staff table deletion.', e);
+        await deleteRow('staff', id);
+    }
+};
 
 export async function fetchProjects() {
     const projects = await fetchAll('projects');

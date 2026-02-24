@@ -342,6 +342,39 @@ insert into task_categories (name, sort_order) values
 on conflict do nothing;
 
 -- ============================================
+-- 20. MICROSOFT OAUTH CONNECTIONS
+-- ============================================
+create table if not exists user_oauth_connections (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references staff(id) on delete cascade,
+  microsoft_email text not null,
+  access_token text not null,
+  refresh_token text not null,
+  expires_at timestamptz not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- ============================================
+-- 21. CONTACT EMAILS
+-- ============================================
+create table if not exists contact_emails (
+  id uuid primary key default uuid_generate_v4(),
+  contact_id uuid not null references contacts(id) on delete cascade,
+  user_id uuid not null references staff(id) on delete set null,
+  graph_message_id text unique not null,
+  conversation_id text not null,
+  direction text not null, -- 'inbound' or 'outbound'
+  subject text default '',
+  body_html text default '',
+  sender_address text not null,
+  recipients jsonb not null default '[]'::jsonb,
+  timestamp timestamptz not null,
+  has_attachments boolean default false,
+  created_at timestamptz default now()
+);
+
+-- ============================================
 -- ROW LEVEL SECURITY (RLS)
 -- Only authenticated users can access data
 -- ============================================
@@ -365,8 +398,24 @@ alter table targets enable row level security;
 alter table templates enable row level security;
 alter table prevention_resources enable row level security;
 alter table recovery_resources enable row level security;
+alter table user_oauth_connections enable row level security;
+alter table contact_emails enable row level security;
 
 -- Policy: authenticated users can do everything (team-internal CRM)
+-- Allow staff to see if they are connected
+do $$
+begin
+  if not exists (
+      select 1 from pg_policies 
+      where schemaname = 'public' 
+      and tablename = 'user_oauth_connections' 
+      and policyname = 'Users can view their own connections'
+  ) then
+      create policy "Users can view their own connections" on user_oauth_connections for select to authenticated using (user_id = auth.uid());
+  end if;
+end
+$$;
+
 -- Repeat for each table:
 do $$
 declare
@@ -378,13 +427,21 @@ begin
       'coaching_sessions','campaigns','projects','tasks','contracts',
       'meeting_notes','meeting_note_contacts','meeting_note_staff',
       'prevention_schedule','invoices','targets','templates',
-      'prevention_resources','recovery_resources','task_categories'
+      'prevention_resources','recovery_resources','task_categories',
+      'user_oauth_connections','contact_emails'
     ])
   loop
-    execute format(
-      'create policy "Authenticated full access" on %I for all to authenticated using (true) with check (true)',
-      tbl
-    );
+    if not exists (
+      select 1 from pg_policies 
+      where schemaname = 'public' 
+      and tablename = tbl 
+      and policyname = 'Authenticated full access'
+    ) then
+      execute format(
+        'create policy "Authenticated full access" on %I for all to authenticated using (true) with check (true)',
+        tbl
+      );
+    end if;
   end loop;
 end;
 $$;

@@ -1,8 +1,48 @@
+import { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
-import { Sun, Moon, Database, RotateCcw } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabaseClient';
+import { Sun, Moon, Database, RotateCcw, Link, CheckCircle, Mail } from 'lucide-react';
 
 export default function Settings() {
     const { theme, toggleTheme } = useTheme();
+    const { user } = useAuth();
+    const [isOutlookConnected, setIsOutlookConnected] = useState(false);
+    const [isChecking, setIsChecking] = useState(true);
+
+    useEffect(() => {
+        async function checkConnection() {
+            if (!user) return;
+            const { data } = await supabase
+                .from('user_oauth_connections')
+                .select('id, microsoft_email')
+                .eq('user_id', user.id)
+                .maybeSingle();
+
+            if (data) setIsOutlookConnected(true);
+            setIsChecking(false);
+        }
+        checkConnection();
+    }, [user]);
+
+    const handleConnectOutlook = () => {
+        if (!user) return;
+
+        const clientId = import.meta.env.VITE_MICROSOFT_CLIENT_ID || 'PENDING_CLIENT_ID';
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+
+        if (!supabaseUrl) {
+            alert("Supabase URL not configured.");
+            return;
+        }
+
+        const redirectUri = `${supabaseUrl}/functions/v1/outlook-auth`;
+        const state = user.id;
+
+        const loginUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&response_mode=query&scope=offline_access%20Mail.ReadWrite%20Mail.Send%20User.Read&state=${state}`;
+
+        window.location.href = loginUrl;
+    };
 
     const handleClearData = () => {
         if (confirm('This will delete all CRM data and reload with default seed data. Are you sure?')) {
@@ -70,6 +110,43 @@ export default function Settings() {
                                 <button className="btn btn-secondary" onClick={handleClearData}>
                                     <RotateCcw style={{ width: 16, height: 16 }} /> Reset Data
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Integrations */}
+                    <div className="card">
+                        <div className="card-header"><h3>Connected Accounts</h3></div>
+                        <div className="card-body">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', gap: 'var(--space-md)', alignItems: 'center' }}>
+                                    <div style={{
+                                        width: 40, height: 40, borderRadius: 'var(--radius-md)',
+                                        background: '#0078D4', color: 'white',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                    }}>
+                                        <Mail size={20} />
+                                    </div>
+                                    <div>
+                                        <div style={{ fontWeight: 500 }}>Microsoft 365 Outlook</div>
+                                        <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                            Connect your email to sync conversations with contacts and send emails directly from the CRM.
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    {isChecking ? (
+                                        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Checking...</span>
+                                    ) : isOutlookConnected ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontSize: 13, fontWeight: 500 }}>
+                                            <CheckCircle size={16} /> Connected
+                                        </div>
+                                    ) : (
+                                        <button className="btn btn-primary" onClick={handleConnectOutlook}>
+                                            <Link size={16} /> Connect Account
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
