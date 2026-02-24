@@ -8,6 +8,7 @@ export default function Settings() {
     const { theme, toggleTheme } = useTheme();
     const { user } = useAuth();
     const [isOutlookConnected, setIsOutlookConnected] = useState(false);
+    const [connectedEmail, setConnectedEmail] = useState('');
     const [isChecking, setIsChecking] = useState(true);
 
     useEffect(() => {
@@ -19,7 +20,10 @@ export default function Settings() {
                 .eq('user_id', user.id)
                 .maybeSingle();
 
-            if (data) setIsOutlookConnected(true);
+            if (data) {
+                setIsOutlookConnected(true);
+                setConnectedEmail(data.microsoft_email);
+            }
             setIsChecking(false);
         }
         checkConnection();
@@ -39,9 +43,31 @@ export default function Settings() {
         const redirectUri = `${supabaseUrl}/functions/v1/outlook-auth`;
         const state = user.id;
 
-        const loginUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&response_mode=query&scope=offline_access%20Mail.ReadWrite%20Mail.Send%20User.Read&state=${state}`;
+        const loginUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&response_mode=query&scope=offline_access%20Mail.ReadWrite%20Mail.Send%20User.Read&state=${state}&prompt=select_account`;
 
         window.location.href = loginUrl;
+    };
+
+    const handleDisconnectOutlook = async () => {
+        if (!user) return;
+
+        if (!confirm('Are you sure you want to disconnect your Microsoft Outlook account? You will no longer be able to send emails from the CRM.')) {
+            return;
+        }
+
+        setIsChecking(true);
+        const { error } = await supabase
+            .from('user_oauth_connections')
+            .delete()
+            .eq('user_id', user.id);
+
+        if (error) {
+            alert(`Error disconnecting account: ${error.message}`);
+        } else {
+            setIsOutlookConnected(false);
+            setConnectedEmail('');
+        }
+        setIsChecking(false);
     };
 
     const handleClearData = () => {
@@ -140,11 +166,16 @@ export default function Settings() {
                                     ) : isOutlookConnected ? (
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontSize: 13, fontWeight: 500 }}>
-                                                <CheckCircle size={16} /> Connected
+                                                <CheckCircle size={16} /> Connected as {connectedEmail}
                                             </div>
-                                            <button className="btn btn-secondary btn-sm" onClick={handleConnectOutlook}>
-                                                <RotateCcw size={14} /> Reconnect
-                                            </button>
+                                            <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                                                <button className="btn btn-secondary btn-sm" onClick={handleConnectOutlook}>
+                                                    <RotateCcw size={14} /> Reconnect
+                                                </button>
+                                                <button className="btn btn-secondary btn-sm" style={{ color: 'var(--danger)', borderColor: 'var(--danger-light)' }} onClick={handleDisconnectOutlook}>
+                                                    Disconnect
+                                                </button>
+                                            </div>
                                         </div>
                                     ) : (
                                         <button className="btn btn-primary" onClick={handleConnectOutlook}>

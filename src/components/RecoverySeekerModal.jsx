@@ -62,19 +62,6 @@ export default function RecoverySeekerModal({ isOpen, onClose, item = null }) {
             const data = { ...form };
             if (!data.status) data.status = 'New Enquiry';
             dispatch({ type: ACTIONS.ADD_SEEKER, payload: data });
-
-            // Add to Contacts
-            dispatch({
-                type: ACTIONS.ADD_CONTACT, payload: {
-                    firstName: data.firstName,
-                    lastName: data.lastName,
-                    email: data.email,
-                    phone: data.phone,
-                    role: 'Treatment Client',
-                    status: 'Active',
-                    notes: `Added via Treatment Tracker.\nReferral: ${data.referralSource || 'Unknown'}`
-                }
-            });
         }
         onClose();
     };

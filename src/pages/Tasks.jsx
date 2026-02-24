@@ -148,8 +148,9 @@ export default function Tasks() {
         return (order[a.priority] ?? 4) - (order[b.priority] ?? 4);
     });
 
-    // Get category names for the kanban columns - include "Uncategorised" if there are tasks without a category
-    const categoryNames = categories.map(c => c.name);
+    // Get unique category objects (by name) and names
+    const uniqueCategories = Array.from(new Map(categories.map(c => [c.name, c])).values());
+    const categoryNames = uniqueCategories.map(c => c.name);
     const uncategorisedTasks = tasks.filter(t => !t.category || !categoryNames.includes(t.category));
 
     return (
@@ -170,7 +171,7 @@ export default function Tasks() {
                     </select>
                     <select className="form-select" style={{ flex: 1 }} value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
                         <option value="All">All Categories</option>
-                        {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                        {uniqueCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                         <option value="">Uncategorised</option>
                     </select>
                     <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
@@ -259,17 +260,29 @@ export default function Tasks() {
                                                     onDragEnd={handleDragEnd}
                                                     onClick={() => { setEditItem(t); setShowModal(true); }}
                                                 >
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                                                        <span className="kanban-card-title">{t.title}</span>
-                                                        <StatusBadge status={t.priority} map={priorityMap} />
-                                                    </div>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                                                        <StatusBadge status={t.status} map={statusMap} />
+                                                    <div className="kanban-card-main">
+                                                        <div className="kanban-card-title-row">
+                                                            <span className="kanban-card-title">{t.title}</span>
+                                                            <button
+                                                                className="btn-icon-only"
+                                                                onClick={(e) => handleDelete(t.id, e)}
+                                                                title="Delete Task"
+                                                            >
+                                                                <Trash2 />
+                                                            </button>
+                                                        </div>
+                                                        <div className="kanban-card-badges">
+                                                            <StatusBadge status={t.priority} map={priorityMap} />
+                                                            <StatusBadge status={t.status} map={statusMap} />
+                                                        </div>
                                                     </div>
                                                     <div className="kanban-card-meta">
-                                                        <span>To: {getStaffName(t.assigneeId)}</span>
-                                                        {t.assignedById && <span>By: {getStaffName(t.assignedById)}</span>}
-                                                        {t.dueDate && <span style={isOverdue(t) ? { color: 'var(--danger)' } : {}}>{new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>}
+                                                        <div className="kanban-card-assignee">To: {getStaffName(t.assigneeId)}</div>
+                                                        {t.dueDate && (
+                                                            <div className={`kanban-card-date ${isOverdue(t) ? 'overdue' : ''}`}>
+                                                                {new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             ))}
@@ -334,16 +347,24 @@ export default function Tasks() {
                                         </div>
                                         {colTasks.map(t => (
                                             <div key={t.id} className="kanban-mobile-card" onClick={() => { setEditItem(t); setShowModal(true); }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                                                <div className="kanban-card-title-row">
                                                     <span style={{ fontWeight: 600, fontSize: 14, flex: 1, textDecoration: t.status === 'Done' ? 'line-through' : 'none', opacity: t.status === 'Done' ? 0.6 : 1 }}>{t.title}</span>
+                                                    <button
+                                                        className="btn-icon-only"
+                                                        onClick={(e) => handleDelete(t.id, e)}
+                                                    >
+                                                        <Trash2 />
+                                                    </button>
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                                                    <StatusBadge status={t.status} map={statusMap} />
                                                     <StatusBadge status={t.priority} map={priorityMap} />
                                                 </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-                                                    <StatusBadge status={t.status} map={statusMap} />
-                                                    <span style={{ fontSize: 11, color: isOverdue(t) ? 'var(--danger)' : 'var(--text-muted)' }}>
+                                                <div className="kanban-card-meta">
+                                                    <div className="kanban-card-assignee">To: {getStaffName(t.assigneeId)}</div>
+                                                    <div className={`kanban-card-date ${isOverdue(t) ? 'overdue' : ''}`}>
                                                         {t.dueDate ? new Date(t.dueDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}
-                                                        {isOverdue(t) && ' ⚠'}
-                                                    </span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}
@@ -385,7 +406,7 @@ export default function Tasks() {
                                 <label className="form-label">Category</label>
                                 <select className="form-select" name="category" defaultValue={editItem?.category || ''}>
                                     <option value="">— No Category —</option>
-                                    {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                    {uniqueCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                                 </select>
                             </div>
                             <div className="form-group">
@@ -421,9 +442,16 @@ export default function Tasks() {
                             <textarea className="form-textarea" name="description" defaultValue={editItem?.description} />
                         </div>
                     </div>
-                    <div className="modal-footer">
-                        <button type="button" className="btn btn-secondary" onClick={() => { setShowModal(false); setEditItem(null); }}>Cancel</button>
-                        <button type="submit" className="btn btn-primary">{editItem ? 'Save Changes' : 'Add Task'}</button>
+                    <div className="modal-footer" style={{ justifyContent: editItem ? 'space-between' : 'flex-end' }}>
+                        {editItem && (
+                            <button type="button" className="btn btn-danger" onClick={(e) => { handleDelete(editItem.id, e); setShowModal(false); }}>
+                                <Trash2 /> Delete Task
+                            </button>
+                        )}
+                        <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                            <button type="button" className="btn btn-secondary" onClick={() => { setShowModal(false); setEditItem(null); }}>Cancel</button>
+                            <button type="submit" className="btn btn-primary">{editItem ? 'Save Changes' : 'Add Task'}</button>
+                        </div>
                     </div>
                 </form>
             </Modal>
@@ -449,10 +477,10 @@ export default function Tasks() {
                         )}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xs)' }}>
-                        {categories.length === 0 && (
+                        {uniqueCategories.length === 0 && (
                             <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-lg)' }}>No categories yet. Add one above.</div>
                         )}
-                        {categories.map(cat => (
+                        {uniqueCategories.map(cat => (
                             <div key={cat.id} style={{
                                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                                 padding: 'var(--space-sm) var(--space-md)',

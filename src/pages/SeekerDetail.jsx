@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
+import EmailTimeline from '../components/EmailTimeline';
 
 export default function SeekerDetail() {
     const { id } = useParams();
@@ -93,6 +94,7 @@ export default function SeekerDetail() {
                     <button className={`tab ${activeTab === 'gambling' ? 'active' : ''}`} onClick={() => setActiveTab('gambling')}>Gambling Profile</button>
                     <button className={`tab ${activeTab === 'substance' ? 'active' : ''}`} onClick={() => setActiveTab('substance')}>Substance Use</button>
                     <button className={`tab ${activeTab === 'coaching' ? 'active' : ''}`} onClick={() => setActiveTab('coaching')}>Coaching Sessions</button>
+                    <button className={`tab ${activeTab === 'emails' ? 'active' : ''}`} onClick={() => setActiveTab('emails')}>Emails</button>
                 </div>
 
                 {/* Overview Tab */}
@@ -316,6 +318,13 @@ export default function SeekerDetail() {
                                 </div>
                             )}
                         </div>
+                    </div>
+                )}
+
+                {/* Emails Tab */}
+                {activeTab === 'emails' && (
+                    <div className="detail-sections">
+                        <EmailTimeline contactId={seeker.id} contactEmail={seeker.email} linkedType="seeker" />
                     </div>
                 )}
             </div>
