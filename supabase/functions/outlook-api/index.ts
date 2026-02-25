@@ -163,7 +163,8 @@ serve(async (req: Request) => {
             const endStr = endDateTime || threeMonthsForward.toISOString()
 
             // Fetch events from the user's primary calendar
-            let nextLink = `https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${startStr}&endDateTime=${endStr}&$select=subject,bodyPreview,start,end,location,attendees,isAllDay,id,transactionId&$top=100`
+            // Note: onlineMeeting is technically a property that can be expanded or selected
+            let nextLink = `https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${startStr}&endDateTime=${endStr}&$select=subject,body,bodyPreview,start,end,location,attendees,isAllDay,id,transactionId,onlineMeetingUrl,organizer,responseStatus,onlineMeeting&$top=100`
             let allOutlookEvents: any[] = []
 
             while (nextLink) {
@@ -188,10 +189,10 @@ serve(async (req: Request) => {
 
                 let matchedContactId = null
                 let matchedSeekerId = null
-                const attendees = event.attendees?.map((a: any) => a.emailAddress?.address) || []
+                const emailsToMatch = event.attendees?.map((a: any) => a.emailAddress?.address) || []
 
-                if (attendees.length > 0) {
-                    const match = await matchContactOrSeeker(supabase, attendees)
+                if (emailsToMatch.length > 0) {
+                    const match = await matchContactOrSeeker(supabase, emailsToMatch)
                     matchedContactId = match.contactId
                     matchedSeekerId = match.seekerId
                 }
@@ -212,6 +213,27 @@ serve(async (req: Request) => {
                     }
                 }
 
+                // Robust Join Link Detection
+                let meetingUrl = event.onlineMeetingUrl || event.onlineMeeting?.joinUrl || null
+
+                // Fallback: search body for Teams/Zoom/Join links if not explicitly in metadata
+                if (!meetingUrl && event.body?.content) {
+                    const bodyText = event.body.content
+                    // Look for common meeting patterns (Teams, Zoom, Google Meet)
+                    const patterns = [
+                        /https:\/\/teams\.microsoft\.com\/l\/meetup-join\/[^"\s<>]+/i,
+                        /https:\/\/[a-z0-9]+\.zoom\.us\/j\/[^"\s<>]+/i,
+                        /https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}/i
+                    ]
+                    for (const pattern of patterns) {
+                        const match = bodyText.match(pattern)
+                        if (match) {
+                            meetingUrl = match[0]
+                            break
+                        }
+                    }
+                }
+
                 eventsToUpsert.push({
                     title: event.subject || '(No Title)',
                     description: event.bodyPreview || '',
@@ -222,7 +244,11 @@ serve(async (req: Request) => {
                     contact_id: matchedContactId,
                     recovery_seeker_id: matchedSeekerId,
                     graph_event_id: event.id,
-                    is_all_day: isAllDay
+                    is_all_day: isAllDay,
+                    online_meeting_url: meetingUrl,
+                    attendees: event.attendees || [],
+                    organizer: event.organizer || null,
+                    response_status: event.responseStatus || null
                 })
             }
 

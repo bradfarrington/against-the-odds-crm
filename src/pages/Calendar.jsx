@@ -2,12 +2,24 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { supabase } from '../lib/supabaseClient';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Users, Clock, MapPin, AlignLeft, Building2, User, Filter, RefreshCw } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Users, Clock, MapPin, AlignLeft, Building2, User, Filter, RefreshCw, Video, ExternalLink, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
 import CoachingSessionModal from '../components/CoachingSessionModal';
 import WorkshopModal from '../components/WorkshopModal';
 import DateTimePicker from '../components/DateTimePicker';
+
+// Add animation keyframes for the popover
+if (typeof document !== 'undefined') {
+    const style = document.createElement('style');
+    style.innerHTML = `
+        @keyframes fadeslide {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    `;
+    document.head.appendChild(style);
+}
 
 export default function Calendar() {
     const { user } = useAuth();
@@ -314,6 +326,12 @@ export default function Calendar() {
                 const dt = new Date(app.start_time);
                 if (isNaN(dt.getTime())) return false;
                 return dt.getFullYear() === year && dt.getMonth() === month && dt.getDate() === d;
+            }).sort((a, b) => {
+                // All-day events first
+                if (a.is_all_day && !b.is_all_day) return -1;
+                if (!a.is_all_day && b.is_all_day) return 1;
+                // Then sort by start time
+                return new Date(a.start_time) - new Date(b.start_time);
             });
             const isToday = tYear === year && tMonth === month && tDate === d;
 
@@ -383,7 +401,8 @@ export default function Calendar() {
                                     title={ev.title}
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        setSelectedEventInfo({ event: ev, x: e.clientX, y: e.clientY });
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        setSelectedEventInfo({ event: ev, rect });
                                     }}
                                 >
                                     {!ev.is_all_day && <span style={{ opacity: 0.8, marginRight: 4 }}>{tzTime}</span>}
@@ -563,7 +582,11 @@ export default function Calendar() {
                                                 fontSize: 11, background: bgColor, color: textColor, borderLeft: `3px solid ${borderLeftColor}`, padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', zIndex: 1,
                                                 textAlign: 'center'
                                             }}
-                                                onClick={(e) => { e.stopPropagation(); setSelectedEventInfo({ event: ev, x: e.clientX, y: e.clientY }); }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const rect = e.currentTarget.getBoundingClientRect();
+                                                    setSelectedEventInfo({ event: ev, rect });
+                                                }}
                                                 title={ev.title}
                                             >
                                                 {ev.title}
@@ -681,7 +704,8 @@ export default function Calendar() {
                                         }} title={`${ev.title}\n${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                setSelectedEventInfo({ event: ev, x: e.clientX, y: e.clientY });
+                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                setSelectedEventInfo({ event: ev, rect });
                                             }}
                                         >
                                             <div style={{ fontWeight: 600, color: textColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: duration <= 30 ? '1' : '1.2' }}>{ev.title}</div>
@@ -942,77 +966,210 @@ export default function Calendar() {
                 </form>
             </Modal>
 
-            {/* Quick Actions Popover */}
-            {selectedEventInfo && (
-                <div
-                    style={{
-                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                        zIndex: 9999 // overlay click to close
-                    }}
-                    onClick={() => setSelectedEventInfo(null)}
-                >
+            {/* Enhanced Appointment Detail Popover */}
+            {selectedEventInfo && (() => {
+                const { rect, event } = selectedEventInfo;
+                const cardWidth = 320;
+                const cardHeight = 450; // Estimated max height for positioning
+                const margin = 12;
+
+                // Default: Right of pill, centered vertically
+                let left = rect.right + margin;
+                let top = rect.top + (rect.height / 2) - (cardHeight / 2);
+                let placement = 'right';
+
+                // Flip to left if not enough space on right
+                if (left + cardWidth > window.innerWidth) {
+                    left = rect.left - cardWidth - margin;
+                    placement = 'left';
+                }
+
+                // Constrain top/bottom
+                if (top < 10) top = 10;
+                if (top + cardHeight > window.innerHeight) {
+                    top = Math.max(10, window.innerHeight - cardHeight - 10);
+                }
+
+                // Triangle pointer position (relative to card top)
+                const arrowTop = Math.max(20, Math.min(cardHeight - 20, rect.top + (rect.height / 2) - top));
+
+                return (
                     <div
                         style={{
-                            position: 'absolute',
-                            top: Math.min(selectedEventInfo.y + 10, window.innerHeight - 150),
-                            left: Math.min(selectedEventInfo.x + 10, window.innerWidth - 250),
-                            background: 'var(--bg-card)',
-                            border: '1px solid var(--border)',
-                            borderRadius: 'var(--radius-md)',
-                            boxShadow: 'var(--shadow-lg)',
-                            padding: 'var(--space-sm)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 'var(--space-xs)',
-                            minWidth: 200,
-                            zIndex: 10000
+                            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                            zIndex: 9999
                         }}
-                        onClick={e => e.stopPropagation()} // keep open if clicking inside
+                        onClick={() => setSelectedEventInfo(null)}
                     >
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4, padding: '0 8px' }}>
-                            {selectedEventInfo.event.title}
-                        </div>
+                        <div
+                            style={{
+                                position: 'absolute',
+                                top,
+                                left,
+                                background: 'var(--bg-card)',
+                                border: '1px solid var(--border)',
+                                borderRadius: 'var(--radius-lg)',
+                                boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+                                padding: 0,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                minWidth: 300,
+                                maxWidth: cardWidth,
+                                maxHeight: cardHeight,
+                                zIndex: 10000,
+                                overflow: 'hidden',
+                                animation: 'fadeslide 0.2s ease-out'
+                            }}
+                            onClick={e => e.stopPropagation()}
+                        >
+                            {/* Triangle Arrow */}
+                            <div style={{
+                                position: 'absolute',
+                                top: arrowTop,
+                                [placement === 'right' ? 'left' : 'right']: -6,
+                                width: 12,
+                                height: 12,
+                                background: 'var(--bg-card)',
+                                borderLeft: placement === 'right' ? '1px solid var(--border)' : 'none',
+                                borderBottom: placement === 'right' ? '1px solid var(--border)' : 'none',
+                                borderRight: placement === 'left' ? '1px solid var(--border)' : 'none',
+                                borderTop: placement === 'left' ? '1px solid var(--border)' : 'none',
+                                transform: 'translateY(-50%) rotate(45deg)',
+                                zIndex: -1
+                            }}></div>
 
-                        {selectedEventInfo.event.eventType === 'coaching' && (
-                            <>
-                                <button className="btn btn-ghost" style={{ justifyContent: 'flex-start', fontSize: 13 }} onClick={() => {
-                                    setEditingCoachingSession(selectedEventInfo.event.originalSession);
-                                    setEditingCoachingSeekerId(selectedEventInfo.event.seekerId);
-                                    setSelectedEventInfo(null);
-                                }}>Edit Session</button>
-                                <button className="btn btn-ghost" style={{ justifyContent: 'flex-start', fontSize: 13 }} onClick={() => {
-                                    navigate(`/recovery-seekers/${selectedEventInfo.event.seekerId}`);
-                                }}>Go to Details</button>
-                            </>
-                        )}
+                            {/* Header color stripe */}
+                            <div style={{ height: 6, width: '100%', background: event.graph_event_id ? '#0078D4' : 'var(--primary)', flexShrink: 0 }}></div>
 
-                        {selectedEventInfo.event.eventType === 'workshop' && (
-                            <>
-                                <button className="btn btn-ghost" style={{ justifyContent: 'flex-start', fontSize: 13 }} onClick={() => {
-                                    setEditingWorkshop(selectedEventInfo.event.originalWorkshop);
-                                    setSelectedEventInfo(null);
-                                }}>Edit Workshop</button>
-                                <button className="btn btn-ghost" style={{ justifyContent: 'flex-start', fontSize: 13 }} onClick={() => {
-                                    navigate(`/workshop-tracker`);
-                                }}>Go to Tracker</button>
-                            </>
-                        )}
+                            {/* Scrollable Content */}
+                            <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                                    <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+                                        {selectedEventInfo.event.title}
+                                    </h3>
+                                    <button
+                                        onClick={() => setSelectedEventInfo(null)}
+                                        style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
+                                    >
+                                        <Plus size={20} style={{ transform: 'rotate(45deg)' }} />
+                                    </button>
+                                </div>
 
-                        {selectedEventInfo.event.eventType === 'appointment' && (
-                            <>
-                                <button className="btn btn-ghost" style={{ justifyContent: 'flex-start', fontSize: 13 }} onClick={() => {
-                                    setSelectedEventInfo(null);
-                                }}>Close</button>
-                                {selectedEventInfo.event.contact_id && (
-                                    <button className="btn btn-ghost" style={{ justifyContent: 'flex-start', fontSize: 13 }} onClick={() => {
-                                        navigate(`/contacts/${selectedEventInfo.event.contact_id}`);
-                                    }}>Go to Contact</button>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-secondary)', fontSize: 13 }}>
+                                        <Clock size={16} />
+                                        <div>
+                                            {selectedEventInfo.event.is_all_day ? 'All Day' : (
+                                                <>
+                                                    {new Date(selectedEventInfo.event.start_time).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+                                                    <div style={{ fontWeight: 600 }}>
+                                                        {new Date(selectedEventInfo.event.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        {' - '}
+                                                        {new Date(selectedEventInfo.event.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {selectedEventInfo.event.location && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-secondary)', fontSize: 13 }}>
+                                            <MapPin size={16} />
+                                            <span>{selectedEventInfo.event.location}</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Teams Meeting Link */}
+                                {selectedEventInfo.event.online_meeting_url && (
+                                    <div style={{ marginBottom: 20 }}>
+                                        <a
+                                            href={selectedEventInfo.event.online_meeting_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="btn btn-primary"
+                                            style={{ width: '100%', justifyContent: 'center', background: 'var(--primary)', borderColor: 'var(--primary)', color: 'white' }}
+                                        >
+                                            <Video size={16} style={{ marginRight: 8 }} />
+                                            Join Meeting
+                                        </a>
+                                    </div>
                                 )}
-                            </>
-                        )}
+
+                                {/* Organizer & Attendees */}
+                                {(selectedEventInfo.event.organizer?.emailAddress || selectedEventInfo.event.attendees?.length > 0) && (
+                                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+                                        {/* Invitation status like Outlook */}
+                                        {selectedEventInfo.event.organizer?.emailAddress && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                                                <div style={{
+                                                    width: 40, height: 40, borderRadius: '50%', background: '#10B981', color: 'white',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700,
+                                                    overflow: 'hidden'
+                                                }}>
+                                                    {(selectedEventInfo.event.organizer.emailAddress.name || selectedEventInfo.event.organizer.emailAddress.address || 'U').charAt(0).toUpperCase()}
+                                                </div>
+                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                                        {selectedEventInfo.event.organizer.emailAddress.name || selectedEventInfo.event.organizer.emailAddress.address} invited you.
+                                                    </span>
+                                                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                                                        {selectedEventInfo.event.response_status?.response === 'accepted' ? 'You accepted.' :
+                                                            selectedEventInfo.event.response_status?.response === 'tentativelyAccepted' ? 'You tentatively accepted.' :
+                                                                selectedEventInfo.event.response_status?.response === 'declined' ? 'You declined.' : 'Invitation pending.'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {selectedEventInfo.event.attendees?.length > 0 && (
+                                            <>
+                                                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12, letterSpacing: '0.5px' }}>
+                                                    Other Participants
+                                                </div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                                    {selectedEventInfo.event.attendees?.slice(0, 4).map((attendee, idx) => (
+                                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                                            <div style={{
+                                                                width: 32, height: 32, borderRadius: '50%', background: '#F1F5F9', color: '#64748B',
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600
+                                                            }}>
+                                                                {(attendee.emailAddress.name || attendee.emailAddress.address || 'A').charAt(0).toUpperCase()}
+                                                            </div>
+                                                            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{attendee.emailAddress.name || attendee.emailAddress.address}</span>
+                                                        </div>
+                                                    ))}
+                                                    {selectedEventInfo.event.attendees?.length > 4 && (
+                                                        <div style={{ fontSize: 11, color: 'var(--text-muted)', paddingLeft: 42 }}>
+                                                            + {selectedEventInfo.event.attendees.length - 4} more
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* CRM Links */}
+                                <div style={{ marginTop: 20, display: 'flex', gap: 8 }}>
+                                    {selectedEventInfo.event.contact_id && (
+                                        <button className="btn btn-secondary btn-sm" style={{ flex: 1, fontSize: 12 }} onClick={() => navigate(`/contacts/${selectedEventInfo.event.contact_id}`)}>
+                                            <User size={14} style={{ marginRight: 6 }} />
+                                            Contact
+                                        </button>
+                                    )}
+                                    {selectedEventInfo.event.recovery_seeker_id && (
+                                        <button className="btn btn-secondary btn-sm" style={{ flex: 1, fontSize: 12 }} onClick={() => navigate(`/recovery-seekers/${selectedEventInfo.event.recovery_seeker_id}`)}>
+                                            <User size={14} style={{ marginRight: 6 }} />
+                                            Seeker
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </div>
-            )}
+                );
+            })()}
 
             {/* Extracted Editing Modals */}
             <WorkshopModal
@@ -1027,6 +1184,6 @@ export default function Calendar() {
                 session={editingCoachingSession}
                 seekerId={editingCoachingSeekerId}
             />
-        </div>
+        </div >
     );
 }
