@@ -110,9 +110,11 @@ export default function EmailTimeline({ contactId, contactEmail, linkedType = 'c
             payload.action = replyingTo;
         } else if (replyingTo) {
             payload.messageId = selectedMessageId;
+            payload.action = replyingTo;
         } else {
             payload.toRecipients = [contactEmail];
             payload.subject = subject;
+            payload.action = 'sendMail';
         }
 
         // Add cc and bcc if present
@@ -131,11 +133,18 @@ export default function EmailTimeline({ contactId, contactEmail, linkedType = 'c
                 body: JSON.stringify(payload)
             });
 
-            console.log("RAW RES FROM API:", res);
             if (!res.ok) {
-                const err = await res.json();
-                console.error("API RETURNED ERROR:", err);
-                throw new Error(err.error || 'Failed to send email');
+                let errText = await res.text();
+                let errMsg = `Failed: ${errText}`;
+                try {
+                    const err = JSON.parse(errText);
+                    console.error("API RETURNED JSON ERROR:", err);
+                    if (err.error) errMsg = err.error;
+                } catch (e) {
+                    console.error("API RETURNED NON-JSON ERROR:", errText, e);
+                    errMsg = `Server returned ${res.status}: ${errText.substring(0, 100)}`;
+                }
+                throw new Error(errMsg);
             }
 
             const successData = await res.json();

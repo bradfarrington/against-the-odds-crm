@@ -1,10 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { getSupabase, corsHeaders } from '../_shared/outlook.ts'
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -22,8 +17,6 @@ serve(async (req) => {
     const clientSecret = Deno.env.get('MICROSOFT_CLIENT_SECRET')
 
     // We should determine the correct redirect URI based on the request URL
-    // For local dev, this might be ngrok. For prod, it's the edge function URL.
-    // Ensure the redirect URI matches EXACTLY what is registered in Azure AD.
     const redirectUri = Deno.env.get('MICROSOFT_REDIRECT_URI') || `${url.origin}${url.pathname}`
 
     // If there's no code, and it's a GET, return an error (or user canceled)
@@ -59,7 +52,7 @@ serve(async (req) => {
     const tokenData = await tokenResponse.json()
 
     if (!tokenResponse.ok) {
-      console.error('Token exchange failed:', tokenData)
+      console.error('[outlook-auth] Token exchange failed:', tokenData)
       return new Response(JSON.stringify({ error: 'Failed to exchange token', details: tokenData }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -75,17 +68,14 @@ serve(async (req) => {
     const profileData = await profileResponse.json()
 
     if (!profileResponse.ok) {
-      console.error('Failed to fetch profile:', profileData)
+      console.error('[outlook-auth] Failed to fetch profile:', profileData)
       return new Response(JSON.stringify({ error: 'Failed to fetch Microsoft profile' }), { status: 400, headers: corsHeaders })
     }
 
     const microsoftEmail = profileData.mail || profileData.userPrincipalName
 
     // 3. Initialize Supabase client
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('MY_SERVICE_ROLE_KEY') ?? '' // Used to bypass RLS securely
-    )
+    const supabaseClient = getSupabase()
 
     // 4. Save tokens securely in user_oauth_connections table
     const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
@@ -102,11 +92,11 @@ serve(async (req) => {
       }, { onConflict: 'user_id' }) // Assuming one connection per user
 
     if (dbError) {
-      console.error('Database error:', dbError)
+      console.error('[outlook-auth] Database error:', dbError)
       return new Response(JSON.stringify({ error: 'Failed to save connection' }), { status: 500, headers: corsHeaders })
     }
 
-    // 5. Create Graph Webhook Subscriptions for Inbox and Sent Items
+    // 5. Create Graph Webhook Subscriptions for Inbox, Sent Items, and Calendar
     const webhookUrl = Deno.env.get('OUTLOOK_WEBHOOK_URL') // Full URL to your webhook edge function
 
     if (webhookUrl) {
@@ -155,21 +145,20 @@ serve(async (req) => {
       }
 
       if (webhookStatus === 'failed') {
-        console.error('Webhook subscription failed:', webhookErrorDetails)
-        // Optionally, update the table to indicate webhook failure
+        console.error('[outlook-auth] Webhook subscription failed:', webhookErrorDetails)
       }
     }
 
     // 6. Redirect back to CRM settings on success
-    // Get frontend URL from env or fallback
     const frontendUrl = Deno.env.get('FRONTEND_URL') || 'http://localhost:5173'
     return Response.redirect(`${frontendUrl}/settings?outlook_connected=success`, 302)
 
-  } catch (err) {
-    console.error('Unhandled error:', err)
+  } catch (err: any) {
+    console.error('[outlook-auth] Unhandled error:', err.message)
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
 })
+

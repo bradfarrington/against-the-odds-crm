@@ -1,27 +1,30 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { getSupabase, getValidGraphToken } from '../_shared/outlook.ts'
-
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { getSupabase, getValidGraphToken, matchContactOrSeeker, corsHeaders } from '../_shared/outlook.ts'
 
 serve(async (req: Request) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
     try {
         const payload = await req.json()
-        const { action, userId, linkedId, linkedType, toRecipients, subject, bodyHtml, messageId, ccRecipients, bccRecipients, eventId, startDateTime, endDateTime, locationStr, isAllDay, transactionId } = payload
+        const {
+            action, userId, linkedId, linkedType, toRecipients,
+            subject, bodyHtml, messageId, ccRecipients, bccRecipients,
+            eventId, startDateTime, endDateTime, locationStr,
+            isAllDay, transactionId
+        } = payload
+
         const supabase = getSupabase()
 
-        if (!userId) return new Response(JSON.stringify({ error: 'User ID is required' }), { status: 400, headers: corsHeaders })
+        if (!userId) {
+            return new Response(JSON.stringify({ error: 'User ID is required' }), { status: 400, headers: corsHeaders })
+        }
 
         const accessToken = await getValidGraphToken(userId)
         let graphRes;
 
         const addExtension = async (msgId: string, lId: string, lType: string) => {
             try {
-                await fetch(`https://graph.microsoft.com/v1.0/me/messages/${msgId}/extensions`, {
+                const extRes = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${msgId}/extensions`, {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -31,39 +34,46 @@ serve(async (req: Request) => {
                         "linkedType": lType
                     })
                 })
+                if (!extRes.ok) {
+                    console.error("[outlook-api] Extension Error:", await extRes.text())
+                }
             } catch (e: any) {
-                console.error("Extension Error:", e.message)
+                console.error("[outlook-api] Extension Exception:", e.message)
             }
         }
 
         const messagePayload = {
-            subject,
-            body: { contentType: 'HTML', content: bodyHtml },
-            toRecipients: toRecipients.map((email: string) => ({ emailAddress: { address: email } })),
-            ccRecipients: ccRecipients?.map((email: string) => ({ emailAddress: { address: email } })) || [],
-            bccRecipients: bccRecipients?.map((email: string) => ({ emailAddress: { address: email } })) || []
+            subject: subject || '(No Subject)',
+            body: { contentType: 'HTML', content: bodyHtml || '' },
+            toRecipients: (toRecipients || []).map((email: string) => ({ emailAddress: { address: email } })),
+            ccRecipients: (ccRecipients || []).map((email: string) => ({ emailAddress: { address: email } })),
+            bccRecipients: (bccRecipients || []).map((email: string) => ({ emailAddress: { address: email } }))
         }
 
         if (action === 'sendMail') {
             if (linkedId) {
-                // Create Draft
+                // Create Draft first so we can add an extension (identifies the record in CRM)
                 const draftRes = await fetch('https://graph.microsoft.com/v1.0/me/messages', {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify(messagePayload)
                 })
-                if (!draftRes.ok) throw new Error(`Draft creation failed: ${await draftRes.text()}`)
+                if (!draftRes.ok) {
+                    const errText = await draftRes.text()
+                    throw new Error(`Draft creation failed: ${errText}`)
+                }
                 const draft = await draftRes.json()
 
-                // Add Extension
+                // Add Extension to draft
                 await addExtension(draft.id, linkedId, linkedType)
 
-                // Send
+                // Send the draft
                 graphRes = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${draft.id}/send`, {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${accessToken}` }
                 })
             } else {
+                // Direct send
                 graphRes = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
@@ -71,23 +81,26 @@ serve(async (req: Request) => {
                 })
             }
         } else if (['reply', 'replyAll', 'forward'].includes(action)) {
-            // Reply/Forward Logic
+            // Reply/Forward Logic: create draft based on existing message
             const endpoint = `https://graph.microsoft.com/v1.0/me/messages/${messageId}/${action === 'forward' ? 'createForward' : action === 'replyAll' ? 'createReplyAll' : 'createReply'}`
             const createRes = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
             })
-            if (!createRes.ok) throw new Error(`Failed to create ${action}: ${await createRes.text()}`)
+            if (!createRes.ok) {
+                const errText = await createRes.text()
+                throw new Error(`Failed to create ${action}: ${errText}`)
+            }
             const draft = await createRes.json()
 
-            // Update draft body/recipients if needed (e.g. for forward)
+            // Update draft body/recipients if provided (e.g. for forward or adding notes to reply)
             if (action === 'forward' || bodyHtml) {
                 await fetch(`https://graph.microsoft.com/v1.0/me/messages/${draft.id}`, {
                     method: 'PATCH',
                     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        toRecipients: messagePayload.toRecipients,
-                        body: messagePayload.body
+                        toRecipients: action === 'forward' ? messagePayload.toRecipients : undefined,
+                        body: bodyHtml ? messagePayload.body : undefined
                     })
                 })
             }
@@ -100,13 +113,13 @@ serve(async (req: Request) => {
             })
         } else if (action === 'createEvent' || action === 'updateEvent') {
             const eventPayload: any = {
-                subject,
+                subject: subject || '(No Title)',
                 body: { contentType: 'HTML', content: bodyHtml || '' },
                 start: { dateTime: startDateTime, timeZone: 'UTC' },
                 end: { dateTime: endDateTime, timeZone: 'UTC' },
                 location: { displayName: locationStr || '' },
                 isAllDay: isAllDay || false,
-                attendees: toRecipients?.map((email: string) => ({ emailAddress: { address: email }, type: 'required' })) || [],
+                attendees: (toRecipients || []).map((email: string) => ({ emailAddress: { address: email }, type: 'required' })),
                 transactionId: transactionId || undefined
             }
 
@@ -156,31 +169,23 @@ serve(async (req: Request) => {
                 const res = await fetch(nextLink, {
                     headers: { 'Authorization': `Bearer ${accessToken}` }
                 })
-                if (!res.ok) throw new Error(`Graph API error: ${await res.text()}`)
+                if (!res.ok) {
+                    const errText = await res.text()
+                    throw new Error(`Graph API fetch events error: ${errText}`)
+                }
                 const data = await res.json()
                 allOutlookEvents.push(...(data.value || []))
                 nextLink = data['@odata.nextLink']
             }
 
-            console.log(`[outlook-api] Received ${allOutlookEvents.length} events from Graph`)
+            console.log(`[outlook-api] Received ${allOutlookEvents.length} events from Graph for user ${userId}`)
 
             for (const event of allOutlookEvents) {
                 // Skip if it was created by the CRM (has localevent: prefix in transactionId)
                 if (event.transactionId?.startsWith('localevent:')) continue;
 
                 const attendees = event.attendees?.map((a: any) => a.emailAddress?.address) || []
-                let matchedContactId = null
-                let matchedSeekerId = null
-
-                if (attendees.length > 0) {
-                    for (const email of attendees) {
-                        if (!email) continue;
-                        const { data: seeker } = await supabase.from('recovery_seekers').select('id').ilike('email', email).maybeSingle()
-                        if (seeker) { matchedSeekerId = seeker.id; break; }
-                        const { data: contact } = await supabase.from('contacts').select('id').ilike('email', email).maybeSingle()
-                        if (contact) { matchedContactId = contact.id; break; }
-                    }
-                }
+                const { contactId: matchedContactId, seekerId: matchedSeekerId } = await matchContactOrSeeker(supabase, attendees)
 
                 const { error: upsertErr } = await supabase.from('appointments').upsert({
                     title: event.subject || '(No Title)',
@@ -195,7 +200,7 @@ serve(async (req: Request) => {
                     is_all_day: event.isAllDay || false
                 }, { onConflict: 'graph_event_id' })
 
-                if (upsertErr) console.error(`Error upserting event ${event.id}:`, upsertErr)
+                if (upsertErr) console.error(`[outlook-api] Error upserting event ${event.id}:`, upsertErr)
             }
 
             return new Response(JSON.stringify({ success: true, count: allOutlookEvents.length }), { status: 200, headers: corsHeaders })
@@ -203,12 +208,15 @@ serve(async (req: Request) => {
 
         if (graphRes && !graphRes.ok) {
             const errText = await graphRes.text()
-            return new Response(JSON.stringify({ error: errText }), { status: graphRes.status, headers: corsHeaders })
+            console.error(`[outlook-api] Graph API error (${action}):`, errText)
+            return new Response(JSON.stringify({ error: errText, action }), { status: graphRes.status, headers: corsHeaders })
         }
 
         return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders })
 
     } catch (err: any) {
+        console.error(`[outlook-api] Server error:`, err.message)
         return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders })
     }
 })
+

@@ -1,10 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { getSupabase, getValidGraphToken } from '../_shared/outlook.ts'
+import { getSupabase, getValidGraphToken, matchContactOrSeeker } from '../_shared/outlook.ts'
 
 serve(async (req: Request) => {
     const url = new URL(req.url)
     const validationToken = url.searchParams.get('validationToken')
 
+    // Microsoft sends a validation token when creating a subscription
     if (validationToken) {
         return new Response(validationToken, { status: 200, headers: { 'Content-Type': 'text/plain' } })
     }
@@ -17,8 +18,8 @@ serve(async (req: Request) => {
 
         for (const notification of notifications) {
             const userId = notification.clientState
-            const messageId = notification.resourceData?.id
-            if (!userId || !messageId) continue;
+            const resourceId = notification.resourceData?.id
+            if (!userId || !resourceId) continue;
 
             const resource = notification.resource || ''
             const isEvent = resource.toLowerCase().includes('events')
@@ -29,34 +30,21 @@ serve(async (req: Request) => {
 
                 if (isEvent) {
                     if (isDeleted) {
-                        await supabase.from('appointments').delete().eq('graph_event_id', messageId)
+                        await supabase.from('appointments').delete().eq('graph_event_id', resourceId)
                         continue;
                     }
 
-                    const graphRes = await fetch(`https://graph.microsoft.com/v1.0/me/events/${messageId}?$select=subject,bodyPreview,start,end,location,attendees,isAllDay,id`, {
+                    const graphRes = await fetch(`https://graph.microsoft.com/v1.0/me/events/${resourceId}?$select=subject,bodyPreview,start,end,location,attendees,isAllDay,id`, {
                         headers: { 'Authorization': `Bearer ${accessToken}` }
                     })
-                    if (!graphRes.ok) continue;
+                    if (!graphRes.ok) {
+                        console.warn(`[outlook-webhook] Failed to fetch event ${resourceId}:`, await graphRes.text())
+                        continue;
+                    }
                     const event = await graphRes.json()
 
                     const attendees = event.attendees?.map((a: any) => a.emailAddress?.address) || []
-
-                    let matchedContactId = null
-                    let matchedSeekerId = null
-
-                    for (const email of attendees) {
-                        if (!email) continue;
-                        const { data: seeker } = await supabase.from('recovery_seekers').select('id').ilike('email', email).maybeSingle()
-                        if (seeker) {
-                            matchedSeekerId = seeker.id
-                            break
-                        }
-                        const { data: contact } = await supabase.from('contacts').select('id').ilike('email', email).maybeSingle()
-                        if (contact) {
-                            matchedContactId = contact.id
-                            break
-                        }
-                    }
+                    const { contactId: matchedContactId, seekerId: matchedSeekerId } = await matchContactOrSeeker(supabase, attendees)
 
                     await supabase.from('appointments').upsert({
                         title: event.subject || '(No Title)',
@@ -75,20 +63,27 @@ serve(async (req: Request) => {
                     continue;
                 }
 
-                // Skip deleted mails for now
-                if (isDeleted) continue;
+                // If not an event, it's a message
+                if (isDeleted) {
+                    // We don't necessarily delete emails from CRM history when deleted in Outlook
+                    // but we could if that's desired. For now, skip.
+                    continue;
+                }
 
                 // Fetch message details
-                const graphRes = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${messageId}?$select=subject,body,sender,toRecipients,receivedDateTime,conversationId,hasAttachments`, {
+                const graphRes = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${resourceId}?$select=subject,body,sender,toRecipients,receivedDateTime,conversationId,hasAttachments`, {
                     headers: { 'Authorization': `Bearer ${accessToken}` }
                 })
 
-                if (!graphRes.ok) continue;
+                if (!graphRes.ok) {
+                    console.warn(`[outlook-webhook] Failed to fetch message ${resourceId}:`, await graphRes.text())
+                    continue;
+                }
 
                 const message = await graphRes.json()
 
-                // Fetch extensions
-                const extRes = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${messageId}/extensions`, {
+                // Fetch extensions to see if this message was created via CRM
+                const extRes = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${resourceId}/extensions`, {
                     headers: { 'Authorization': `Bearer ${accessToken}` }
                 })
                 const extData = await extRes.json()
@@ -100,32 +95,33 @@ serve(async (req: Request) => {
                 let direction = 'inbound'
 
                 if (crmExtension) {
+                    // Explicitly linked via CRM
                     if (crmExtension.linkedType === 'seeker') {
                         matchedSeekerId = crmExtension.linkedId
                     } else {
                         matchedContactId = crmExtension.linkedId
                     }
+
+                    // Determine direction by checking if sender is the connected user
                     const myRes = await fetch('https://graph.microsoft.com/v1.0/me', { headers: { Authorization: `Bearer ${accessToken}` } })
                     const myInfo = await myRes.json()
                     direction = message.sender?.emailAddress?.address?.toLowerCase() === myInfo.mail?.toLowerCase() ? 'outbound' : 'inbound'
                 } else {
+                    // Automatic linking by email matching
                     const senderEmail = message.sender?.emailAddress?.address
                     const recipients = message.toRecipients?.map((r: any) => r.emailAddress?.address) || []
                     const allEmails = [senderEmail, ...recipients].filter(Boolean)
 
-                    for (const email of allEmails) {
-                        const { data: seeker } = await supabase.from('recovery_seekers').select('id').ilike('email', email!).maybeSingle()
-                        if (seeker) {
-                            matchedSeekerId = seeker.id
-                            direction = email === senderEmail ? 'inbound' : 'outbound'
-                            break
-                        }
-                        const { data: contact } = await supabase.from('contacts').select('id').ilike('email', email!).maybeSingle()
-                        if (contact) {
-                            matchedContactId = contact.id
-                            direction = email === senderEmail ? 'inbound' : 'outbound'
-                            break
-                        }
+                    const match = await matchContactOrSeeker(supabase, allEmails)
+                    matchedContactId = match.contactId
+                    matchedSeekerId = match.seekerId
+
+                    if (matchedContactId || matchedSeekerId) {
+                        // Determine direction: if sender is one of the CRM records, it's inbound
+                        // This logic is slightly different from above: if WE (CRM User) am NOT the sender, it's inbound.
+                        const myRes = await fetch('https://graph.microsoft.com/v1.0/me', { headers: { Authorization: `Bearer ${accessToken}` } })
+                        const myInfo = await myRes.json()
+                        direction = message.sender?.emailAddress?.address?.toLowerCase() === myInfo.mail?.toLowerCase() ? 'outbound' : 'inbound'
                     }
                 }
 
@@ -145,13 +141,14 @@ serve(async (req: Request) => {
                         has_attachments: !!message.hasAttachments
                     }, { onConflict: 'graph_message_id' })
                 }
-            } catch (innerErr) {
-                console.error("Webhook Loop Error:", innerErr)
+            } catch (innerErr: any) {
+                console.error(`[outlook-webhook] Loop Error for resource ${resourceId}:`, innerErr.message)
             }
         }
         return new Response('ok', { status: 200 })
-    } catch (err) {
-        console.error("Webhook Error:", err)
+    } catch (err: any) {
+        console.error("[outlook-webhook] Webhook Global Error:", err.message)
         return new Response('error', { status: 500 })
     }
 })
+
