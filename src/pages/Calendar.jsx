@@ -88,6 +88,7 @@ export default function Calendar() {
             }
 
             let totalCount = 0;
+            let totalDeleted = 0;
             for (const userId of userIds) {
                 const { data: jsonRes, error: syncError } = await supabase.functions.invoke('outlook-api', {
                     body: { action: 'getEvents', userId }
@@ -113,6 +114,7 @@ export default function Calendar() {
                 }
 
                 totalCount += jsonRes?.count || 0;
+                totalDeleted += jsonRes?.deleted || 0;
             }
 
             // Re-fetch local appointments to show newly imported ones
@@ -124,7 +126,8 @@ export default function Calendar() {
             if (data) setAppointments(data);
 
             if (isManual) {
-                alert(`Successfully synced ${totalCount} events from Outlook.`);
+                const deletedNote = totalDeleted > 0 ? `, removed ${totalDeleted} deleted` : '';
+                alert(`Successfully synced ${totalCount} events from Outlook${deletedNote}.`);
             }
 
         } catch (err) {
@@ -303,7 +306,11 @@ export default function Calendar() {
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
             const dayEvents = allEvents.filter(app => {
                 if (!app.start_time) return false;
-                if (app.is_all_day && !app.start_time.includes('T')) return app.start_time.startsWith(dateStr);
+                if (app.is_all_day) {
+                    const startDate = app.start_time.split('T')[0];
+                    const endDate = (app.end_time || app.start_time).split('T')[0];
+                    return dateStr >= startDate && dateStr <= endDate;
+                }
                 const dt = new Date(app.start_time);
                 if (isNaN(dt.getTime())) return false;
                 return dt.getFullYear() === year && dt.getMonth() === month && dt.getDate() === d;
@@ -340,9 +347,9 @@ export default function Calendar() {
 
                             let bgColor, borderLeft, textColor;
                             if (ev.graph_event_id) {
-                                bgColor = 'rgba(0, 120, 212, 0.1)';
+                                bgColor = '#ADD8E6';
                                 borderLeft = '3px solid #0078D4';
-                                textColor = '#0078D4';
+                                textColor = '#004085';
                             } else if (ev.eventType === 'coaching') {
                                 bgColor = 'var(--success)';
                                 borderLeft = '3px solid rgba(34, 197, 94, 0.15)';
@@ -370,7 +377,8 @@ export default function Calendar() {
                                         whiteSpace: 'nowrap',
                                         overflow: 'hidden',
                                         textOverflow: 'ellipsis',
-                                        cursor: 'pointer'
+                                        cursor: 'pointer',
+                                        textAlign: ev.is_all_day ? 'center' : 'left'
                                     }}
                                     title={ev.title}
                                     onClick={(e) => {
@@ -495,6 +503,79 @@ export default function Calendar() {
                     ))}
                 </div>
 
+                {/* All-day events row */}
+                {daysData.some(d => d.events.some(ev => ev.is_all_day)) && (() => {
+                    const uniqueAllDayEvents = [];
+                    const eventIds = new Set();
+                    daysData.forEach((d, dayIndex) => {
+                        d.events.filter(ev => ev.is_all_day).forEach(ev => {
+                            if (!eventIds.has(ev.id)) {
+                                eventIds.add(ev.id);
+                                uniqueAllDayEvents.push({ ...ev, startDayIndex: dayIndex, endDayIndex: dayIndex });
+                            } else {
+                                const existing = uniqueAllDayEvents.find(e => e.id === ev.id);
+                                if (existing) existing.endDayIndex = dayIndex;
+                            }
+                        });
+                    });
+
+                    const tracks = [];
+                    uniqueAllDayEvents.sort((a, b) => (b.endDayIndex - b.startDayIndex) - (a.endDayIndex - a.startDayIndex) || a.startDayIndex - b.startDayIndex);
+                    uniqueAllDayEvents.forEach(ev => {
+                        let assigned = false;
+                        for (let track of tracks) {
+                            if (!track.some(e => !(ev.endDayIndex < e.startDayIndex || ev.startDayIndex > e.endDayIndex))) {
+                                track.push(ev);
+                                assigned = true;
+                                break;
+                            }
+                        }
+                        if (!assigned) tracks.push([ev]);
+                    });
+
+                    return (
+                        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg-main)', flexShrink: 0, paddingRight: 6 }}>
+                            <div style={{ width: 60, flexShrink: 0, borderRight: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 0' }}>
+                                <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>All day</span>
+                            </div>
+                            <div style={{ position: 'relative', flex: 1, minHeight: Math.max(28, tracks.length * 28 + 4) }}>
+                                {/* Visual day dividers */}
+                                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', pointerEvents: 'none' }}>
+                                    {daysData.map((_, i) => (
+                                        <div key={i} style={{ flex: 1, borderRight: i < daysData.length - 1 ? '1px solid var(--border)' : 'none' }}></div>
+                                    ))}
+                                </div>
+                                {/* Spanning Events */}
+                                {tracks.map((track, trackIndex) => (
+                                    track.map(ev => {
+                                        const left = (ev.startDayIndex / daysData.length) * 100;
+                                        const width = ((ev.endDayIndex - ev.startDayIndex + 1) / daysData.length) * 100;
+                                        let bgColor = '#ffffff', borderLeftColor = '#e0e0e0', textColor = '#000000';
+                                        if (ev.graph_event_id) { bgColor = '#ADD8E6'; borderLeftColor = '#0078D4'; textColor = '#004085'; }
+                                        else if (ev.eventType === 'coaching') { bgColor = 'var(--success)'; borderLeftColor = 'rgba(34,197,94,0.4)'; }
+                                        else if (ev.eventType === 'workshop') { bgColor = 'var(--primary-light)'; borderLeftColor = 'var(--primary)'; }
+                                        return (
+                                            <div key={ev.id} style={{
+                                                position: 'absolute',
+                                                top: trackIndex * 26 + 4,
+                                                left: `calc(${left}% + 4px)`,
+                                                width: `calc(${width}% - 8px)`,
+                                                fontSize: 11, background: bgColor, color: textColor, borderLeft: `3px solid ${borderLeftColor}`, padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', zIndex: 1,
+                                                textAlign: 'center'
+                                            }}
+                                                onClick={(e) => { e.stopPropagation(); setSelectedEventInfo({ event: ev, x: e.clientX, y: e.clientY }); }}
+                                                title={ev.title}
+                                            >
+                                                {ev.title}
+                                            </div>
+                                        );
+                                    })
+                                ))}
+                            </div>
+                        </div>
+                    );
+                })()}
+
                 {/* Scrollable Body */}
                 <div style={{ display: 'flex', flex: 1, overflowY: 'scroll' }}>
                     {/* Time axis */}
@@ -529,8 +610,8 @@ export default function Calendar() {
                                     setView('day');
                                 }}
                             >
-                                {/* Events */}
-                                {d.events.map(ev => {
+                                {/* Events (all-day events shown above in banner row) */}
+                                {d.events.filter(ev => !ev.is_all_day).map(ev => {
                                     const start = new Date(ev.start_time);
                                     let end = new Date(ev.end_time);
                                     if (isNaN(end.getTime())) end = start;
@@ -559,9 +640,9 @@ export default function Calendar() {
 
                                     let bgColor, borderLeftColor, textColor;
                                     if (ev.graph_event_id) {
-                                        bgColor = 'rgba(0, 120, 212, 0.1)';
+                                        bgColor = '#ADD8E6';
                                         borderLeftColor = '#0078D4';
-                                        textColor = '#0078D4';
+                                        textColor = '#004085';
                                     } else if (ev.eventType === 'coaching') {
                                         bgColor = 'var(--success)';
                                         borderLeftColor = 'rgba(34, 197, 94, 0.4)';
@@ -586,12 +667,13 @@ export default function Calendar() {
                                             background: bgColor,
                                             borderLeft: `3px solid ${borderLeftColor}`,
                                             borderRadius: 4,
-                                            padding: duration <= 20 ? '2px 6px' : '4px 6px',
+                                            padding: duration <= 30 ? '2px 6px' : '4px 6px',
                                             fontSize: 11,
                                             overflow: 'hidden',
                                             display: 'flex',
                                             flexDirection: 'column',
-                                            gap: duration <= 20 ? 0 : 2,
+                                            justifyContent: duration <= 30 ? 'center' : 'flex-start',
+                                            gap: duration <= 30 ? 0 : 2,
                                             boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
                                             cursor: 'pointer',
                                             color: textColor,
@@ -602,8 +684,8 @@ export default function Calendar() {
                                                 setSelectedEventInfo({ event: ev, x: e.clientX, y: e.clientY });
                                             }}
                                         >
-                                            <div style={{ fontWeight: 600, color: textColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.title}</div>
-                                            {duration >= 30 && (
+                                            <div style={{ fontWeight: 600, color: textColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: duration <= 30 ? '1' : '1.2' }}>{ev.title}</div>
+                                            {duration >= 45 && (
                                                 <div style={{ fontSize: 10, color: textColor, opacity: 0.8 }}>
                                                     {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                 </div>
@@ -630,7 +712,11 @@ export default function Calendar() {
             const dateStr = `${currentDay.getFullYear()}-${String(currentDay.getMonth() + 1).padStart(2, '0')}-${String(currentDay.getDate()).padStart(2, '0')}`;
             const dayEvents = allEvents.filter(app => {
                 if (!app.start_time) return false;
-                if (app.is_all_day && !app.start_time.includes('T')) return app.start_time.startsWith(dateStr);
+                if (app.is_all_day) {
+                    const startDate = app.start_time.split('T')[0];
+                    const endDate = (app.end_time || app.start_time).split('T')[0];
+                    return dateStr >= startDate && dateStr <= endDate;
+                }
                 const dt = new Date(app.start_time);
                 if (isNaN(dt.getTime())) return false;
                 return dt.getFullYear() === currentDay.getFullYear() && dt.getMonth() === currentDay.getMonth() && dt.getDate() === currentDay.getDate();
@@ -646,7 +732,11 @@ export default function Calendar() {
         const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
         const dayEvents = allEvents.filter(app => {
             if (!app.start_time) return false;
-            if (app.is_all_day && !app.start_time.includes('T')) return app.start_time.startsWith(dateStr);
+            if (app.is_all_day) {
+                const startDate = app.start_time.split('T')[0];
+                const endDate = (app.end_time || app.start_time).split('T')[0];
+                return dateStr >= startDate && dateStr <= endDate;
+            }
             const dt = new Date(app.start_time);
             if (isNaN(dt.getTime())) return false;
             return dt.getFullYear() === currentDate.getFullYear() && dt.getMonth() === currentDate.getMonth() && dt.getDate() === currentDate.getDate();

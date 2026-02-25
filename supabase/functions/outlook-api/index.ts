@@ -196,17 +196,33 @@ serve(async (req: Request) => {
                     matchedSeekerId = match.seekerId
                 }
 
+                const isAllDay = event.isAllDay || false
+                let startTime = event.start?.dateTime
+                let endTime = event.end?.dateTime
+                if (isAllDay && startTime) {
+                    // Store as YYYY-MM-DD for all-day events (no time component needed)
+                    startTime = startTime.split('T')[0]
+                    if (endTime) {
+                        // Graph end is exclusive (day after last day), subtract 1 for inclusive end
+                        const exclusiveEnd = new Date(endTime)
+                        exclusiveEnd.setUTCDate(exclusiveEnd.getUTCDate() - 1)
+                        endTime = exclusiveEnd.toISOString().split('T')[0]
+                    } else {
+                        endTime = startTime
+                    }
+                }
+
                 eventsToUpsert.push({
                     title: event.subject || '(No Title)',
                     description: event.bodyPreview || '',
-                    start_time: event.start?.dateTime,
-                    end_time: event.end?.dateTime,
+                    start_time: startTime,
+                    end_time: endTime,
                     location: event.location?.displayName || '',
                     user_id: userId,
                     contact_id: matchedContactId,
                     recovery_seeker_id: matchedSeekerId,
                     graph_event_id: event.id,
-                    is_all_day: event.isAllDay || false
+                    is_all_day: isAllDay
                 })
             }
 
@@ -218,7 +234,32 @@ serve(async (req: Request) => {
                 if (upsertErr) console.error(`[outlook-api] Error batch upserting events chunk:`, upsertErr)
             }
 
-            return new Response(JSON.stringify({ success: true, count: allOutlookEvents.length }), { status: 200, headers: corsHeaders })
+            // Remove appointments that were deleted in Outlook.
+            // Fetch all Outlook-synced appointments for this user within the sync date range,
+            // then delete any whose graph_event_id is no longer in the Outlook response.
+            const outlookIds = new Set(allOutlookEvents.map((e: any) => e.id))
+            const { data: existingAppts } = await supabase
+                .from('appointments')
+                .select('id, graph_event_id')
+                .eq('user_id', userId)
+                .not('graph_event_id', 'is', null)
+                .gte('start_time', startStr)
+                .lte('start_time', endStr)
+
+            const toDelete = (existingAppts || [])
+                .filter((a: any) => !outlookIds.has(a.graph_event_id))
+                .map((a: any) => a.id)
+
+            if (toDelete.length > 0) {
+                const { error: deleteErr } = await supabase
+                    .from('appointments')
+                    .delete()
+                    .in('id', toDelete)
+                if (deleteErr) console.error(`[outlook-api] Error deleting removed events:`, deleteErr)
+                else console.log(`[outlook-api] Deleted ${toDelete.length} appointments removed from Outlook for user ${userId}`)
+            }
+
+            return new Response(JSON.stringify({ success: true, count: allOutlookEvents.length, deleted: toDelete.length }), { status: 200, headers: corsHeaders })
         }
 
         if (graphRes && !graphRes.ok) {
