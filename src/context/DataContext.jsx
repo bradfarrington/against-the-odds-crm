@@ -78,6 +78,10 @@ const ACTIONS = {
     ADD_RECOVERY_RESOURCE: 'ADD_RECOVERY_RESOURCE',
     UPDATE_RECOVERY_RESOURCE: 'UPDATE_RECOVERY_RESOURCE',
     DELETE_RECOVERY_RESOURCE: 'DELETE_RECOVERY_RESOURCE',
+    // Surveys
+    ADD_SURVEY: 'ADD_SURVEY',
+    UPDATE_SURVEY: 'UPDATE_SURVEY',
+    DELETE_SURVEY: 'DELETE_SURVEY',
 };
 
 // ─── Initial empty state ──────────────────────────────────────
@@ -99,6 +103,7 @@ const emptyState = {
     templates: [],
     preventionResources: [],
     recoveryResources: [],
+    surveys: [],
 };
 
 // ─── Reducer ──────────────────────────────────────────────────
@@ -265,6 +270,11 @@ function dataReducer(state, action) {
         case ACTIONS.UPDATE_RECOVERY_RESOURCE: return crudLocal(state, 'recoveryResources', { crud: 'UPDATE', payload: action.payload });
         case ACTIONS.DELETE_RECOVERY_RESOURCE: return crudLocal(state, 'recoveryResources', { crud: 'DELETE', payload: action.payload });
 
+        // Surveys
+        case ACTIONS.ADD_SURVEY: return crudLocal(state, 'surveys', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_SURVEY: return crudLocal(state, 'surveys', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_SURVEY: return crudLocal(state, 'surveys', { crud: 'DELETE', payload: action.payload });
+
         default:
             return state;
     }
@@ -343,6 +353,10 @@ const apiMap = {
     [ACTIONS.ADD_RECOVERY_RESOURCE]: (p) => api.createRecoveryResource(p),
     [ACTIONS.UPDATE_RECOVERY_RESOURCE]: (p) => api.modifyRecoveryResource(p.id, p),
     [ACTIONS.DELETE_RECOVERY_RESOURCE]: (p) => api.removeRecoveryResource(p),
+
+    [ACTIONS.ADD_SURVEY]: (p) => api.createSurvey(p),
+    [ACTIONS.UPDATE_SURVEY]: (p) => api.modifySurvey(p.id, p),
+    [ACTIONS.DELETE_SURVEY]: (p) => api.removeSurvey(p),
 };
 
 // ─── Provider ──────────────────────────────────────────────────
@@ -366,7 +380,7 @@ export function DataProvider({ children }) {
                 companies, contacts, recoverySeekers, campaigns, staff,
                 projects, tasks, contracts, meetingNotes, preventionSchedule,
                 invoices, targets, templates, preventionResources, recoveryResources,
-                taskCategories,
+                taskCategories, surveys,
             ] = await Promise.all([
                 api.fetchCompanies(),
                 api.fetchContacts(),
@@ -384,6 +398,7 @@ export function DataProvider({ children }) {
                 api.fetchPreventionResources(),
                 api.fetchRecoveryResources(),
                 api.fetchTaskCategories(),
+                api.fetchSurveys(),
             ]);
             rawDispatch({
                 type: ACTIONS.SET_DATA,
@@ -391,7 +406,7 @@ export function DataProvider({ children }) {
                     companies, contacts, recoverySeekers, campaigns, staff,
                     projects, tasks, contracts, meetingNotes, preventionSchedule,
                     invoices, targets, templates, preventionResources, recoveryResources,
-                    taskCategories,
+                    taskCategories, surveys,
                 },
             });
         } catch (err) {

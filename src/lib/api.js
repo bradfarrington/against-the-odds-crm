@@ -304,3 +304,101 @@ export const fetchTaskCategories = () => fetchAll('task_categories', 'sort_order
 export const createTaskCategory = (d) => insertRow('task_categories', d);
 export const modifyTaskCategory = (id, d) => updateRow('task_categories', id, d);
 export const removeTaskCategory = (id) => deleteRow('task_categories', id);
+
+// ─── Surveys ──────────────────────────────────────────────────
+
+export async function fetchSurveys(type) {
+    let query = supabase
+        .from('surveys')
+        .select('*, survey_questions(count)')
+        .order('created_at', { ascending: false });
+    if (type) query = query.eq('type', type);
+    const res = await query;
+    const data = handleError(res);
+    return data.map(row => ({
+        ...toCamel(row),
+        questionCount: row.survey_questions?.[0]?.count ?? 0,
+    }));
+}
+
+export const createSurvey = (d) => insertRow('surveys', d);
+export const modifySurvey = (id, d) => updateRow('surveys', id, d);
+export const removeSurvey = (id) => deleteRow('surveys', id);
+
+// Survey Questions
+
+export async function fetchSurveyQuestions(surveyId) {
+    const res = await supabase
+        .from('survey_questions')
+        .select('*')
+        .eq('survey_id', surveyId)
+        .order('sort_order', { ascending: true });
+    return handleError(res).map(toCamel);
+}
+
+export const createSurveyQuestion = (d) => insertRow('survey_questions', d);
+export const modifySurveyQuestion = (id, d) => updateRow('survey_questions', id, d);
+export const removeSurveyQuestion = (id) => deleteRow('survey_questions', id);
+
+export async function reorderSurveyQuestions(updates) {
+    await Promise.all(
+        updates.map(({ id, sortOrder }) =>
+            supabase.from('survey_questions').update({ sort_order: sortOrder }).eq('id', id)
+        )
+    );
+}
+
+// Survey Responses
+
+export async function fetchSurveyResponses(surveyId) {
+    const res = await supabase
+        .from('survey_responses')
+        .select('*, survey_answers(*)')
+        .eq('survey_id', surveyId)
+        .order('submitted_at', { ascending: false });
+    return handleError(res).map(row => ({
+        ...toCamel(row),
+        answers: (row.survey_answers || []).map(toCamel),
+    }));
+}
+
+export const createSurveyResponse = (d) => insertRow('survey_responses', d);
+
+export async function submitSurveyAnswers(responseId, answers) {
+    const rows = answers.map(a => ({
+        response_id: responseId,
+        question_id: a.questionId,
+        value: a.value,
+    }));
+    const res = await supabase.from('survey_answers').insert(rows);
+    handleError(res);
+}
+
+// Public Survey (anon access — RLS policies allow select on surveys/questions, insert on responses/answers)
+
+export async function fetchPublicSurvey(token) {
+    const res = await supabase
+        .from('surveys')
+        .select('*, survey_questions(*)')
+        .eq('public_token', token)
+        .eq('status', 'active')
+        .single();
+    if (res.error) return null;
+    const row = res.data;
+    const survey = toCamel({ ...row, survey_questions: undefined });
+    const questions = (row.survey_questions || [])
+        .map(toCamel)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+    return { survey, questions };
+}
+
+export async function submitPublicSurveyResponse(surveyId, answers, metadata = {}) {
+    const responseRes = await supabase
+        .from('survey_responses')
+        .insert({ survey_id: surveyId, respondent_type: 'external', metadata })
+        .select()
+        .single();
+    if (responseRes.error) throw new Error(responseRes.error.message);
+    const response = toCamel(responseRes.data);
+    await submitSurveyAnswers(response.id, answers);
+}

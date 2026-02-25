@@ -17,6 +17,7 @@ import {
     FolderKanban,
     FileText,
     UsersRound,
+    ClipboardList,
     Settings,
     LogOut,
     Loader2,
@@ -46,6 +47,7 @@ const navSections = [
             { to: '/workshop-tracker', icon: <Columns3 />, label: 'Workshop Tracker' },
             { to: '/prevention/resources', icon: <FolderOpen />, label: 'Resources' },
             { to: '/prevention/invoices', icon: <Receipt />, label: 'Invoices' },
+            { to: '/prevention/surveys', icon: <ClipboardList />, label: 'Surveys' },
         ],
     },
     {
@@ -55,6 +57,7 @@ const navSections = [
             { to: '/treatment-tracker', icon: <HeartHandshake />, label: 'Treatment Tracker' },
             { to: '/recovery/resources', icon: <FolderOpen />, label: 'Resources' },
             { to: '/recovery/invoices', icon: <Receipt />, label: 'Invoices' },
+            { to: '/recovery/surveys', icon: <ClipboardList />, label: 'Surveys' },
         ],
     },
     {

@@ -26,6 +26,9 @@ import StaffHub from './pages/StaffHub';
 import MeetingNotes from './pages/MeetingNotes';
 import MeetingNoteDetail from './pages/MeetingNoteDetail';
 import Settings from './pages/Settings';
+import Surveys from './pages/Surveys';
+import SurveyBuilder from './pages/SurveyBuilder';
+import PublicSurvey from './pages/PublicSurvey';
 import { Loader2 } from 'lucide-react';
 
 function AppRoutes() {
@@ -44,6 +47,7 @@ function AppRoutes() {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/survey/:token" element={<PublicSurvey />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
@@ -53,6 +57,8 @@ function AppRoutes() {
     <DataProvider>
       <Routes>
         <Route path="/login" element={<Navigate to="/" replace />} />
+        {/* Public survey — no auth or layout required */}
+        <Route path="/survey/:token" element={<PublicSurvey />} />
         <Route path="/" element={<Layout />}>
           <Route index element={<Dashboard />} />
           {/* Core */}
@@ -68,11 +74,17 @@ function AppRoutes() {
           <Route path="workshop-tracker" element={<WorkshopTracker />} />
           <Route path="prevention/resources" element={<PreventionResources />} />
           <Route path="prevention/invoices" element={<Invoices category="Prevention" />} />
+          <Route path="prevention/surveys" element={<Surveys type="prevention" />} />
+          <Route path="prevention/surveys/new" element={<SurveyBuilder />} />
+          <Route path="prevention/surveys/:id/edit" element={<SurveyBuilder />} />
           {/* Recovery */}
           <Route path="recovery-seekers" element={<RecoverySeekersList />} />
           <Route path="treatment-tracker" element={<RecoverySeekers />} />
           <Route path="recovery/resources" element={<RecoveryResources />} />
           <Route path="recovery/invoices" element={<Invoices category="Recovery" />} />
+          <Route path="recovery/surveys" element={<Surveys type="recovery" />} />
+          <Route path="recovery/surveys/new" element={<SurveyBuilder />} />
+          <Route path="recovery/surveys/:id/edit" element={<SurveyBuilder />} />
           {/* Operations */}
           <Route path="projects" element={<Projects />} />
           <Route path="projects/:id" element={<ProjectDetail />} />
