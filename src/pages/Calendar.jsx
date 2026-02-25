@@ -48,7 +48,7 @@ export default function Calendar() {
         }
         setLoading(false);
 
-        // Trigger Outlook sync in the background if selectedUser has a connection
+        // Trigger Outlook sync in the background if a specific user is selected and has a connection
         if (selectedUser !== 'all') {
             const { data: conn } = await supabase
                 .from('user_oauth_connections')
@@ -62,28 +62,76 @@ export default function Calendar() {
         }
     };
 
-    const fetchOutlookEvents = async (uid) => {
-        if (!uid || uid === 'all') return;
+    const fetchOutlookEvents = async (uid, isManual = false) => {
+        if (!uid) return;
         setIsSyncingOutlook(true);
         try {
-            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-            const res = await fetch(`${supabaseUrl}/functions/v1/outlook-api`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'getEvents', userId: uid })
-            });
-            if (!res.ok) throw new Error(await res.text());
+            // Ensure the session JWT is valid (refreshes automatically if close to expiry)
+            const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
+            if (sessionErr || !session) {
+                throw new Error('Your session has expired. Please log out and log back in.');
+            }
+
+            // Determine which user IDs to sync
+            let userIds = [];
+            if (uid === 'all') {
+                const { data: connections } = await supabase
+                    .from('user_oauth_connections')
+                    .select('user_id');
+                userIds = (connections || []).map(c => c.user_id);
+                if (userIds.length === 0) {
+                    if (isManual) alert('No Outlook accounts connected. Please connect an Outlook account first.');
+                    return;
+                }
+            } else {
+                userIds = [uid];
+            }
+
+            let totalCount = 0;
+            for (const userId of userIds) {
+                const { data: jsonRes, error: syncError } = await supabase.functions.invoke('outlook-api', {
+                    body: { action: 'getEvents', userId }
+                });
+
+                if (syncError) {
+                    let errMessage = syncError.message || 'Unknown server error';
+                    try {
+                        if (syncError.context && typeof syncError.context.json === 'function') {
+                            const errData = await syncError.context.json();
+                            errMessage = errData?.error || JSON.stringify(errData);
+                        } else if (syncError.context && typeof syncError.context.text === 'function') {
+                            errMessage = await syncError.context.text();
+                        }
+                    } catch (e) { }
+                    console.error('[Calendar] Sync error for user', userId, ':', errMessage);
+                    if (userIds.length === 1) {
+                        // Single user — surface the actual error rather than showing "0 events"
+                        throw new Error(errMessage);
+                    }
+                    // Multiple users — log and continue to the next
+                    continue;
+                }
+
+                totalCount += jsonRes?.count || 0;
+            }
 
             // Re-fetch local appointments to show newly imported ones
             let query = supabase.from('appointments').select('*');
-            if (selectedUser !== 'all') {
-                query = query.eq('user_id', selectedUser);
+            if (uid !== 'all') {
+                query = query.eq('user_id', uid);
             }
             const { data } = await query;
             if (data) setAppointments(data);
 
+            if (isManual) {
+                alert(`Successfully synced ${totalCount} events from Outlook.`);
+            }
+
         } catch (err) {
             console.error('[Calendar] Outlook sync failed:', err);
+            if (isManual) {
+                alert(`Outlook sync failed: ${err.message || 'Unknown error. Check console.'}`);
+            }
         } finally {
             setIsSyncingOutlook(false);
         }
@@ -187,7 +235,6 @@ export default function Calendar() {
         const { data: conn } = await supabase.from('user_oauth_connections').select('id').eq('user_id', user.id).maybeSingle();
         if (conn) {
             try {
-                const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
                 const payload = {
                     action: 'createEvent',
                     userId: user.id,
@@ -199,14 +246,13 @@ export default function Calendar() {
                     isAllDay: newEvent.is_all_day,
                     transactionId: `localevent:${crypto.randomUUID()}`
                 };
-                const res = await fetch(`${supabaseUrl}/functions/v1/outlook-api`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+
+                const { error: pushError } = await supabase.functions.invoke('outlook-api', {
+                    body: payload
                 });
 
                 // Even if graph fails, we can proceed to insert it locally (or handle as an alert)
-                if (!res.ok) console.warn("Failed to push to graph api", await res.text());
+                if (pushError) console.warn("Failed to push to graph api", pushError.message);
             } catch (err) {
                 console.error(err);
             }
@@ -636,7 +682,7 @@ export default function Calendar() {
                     {true && (
                         <button
                             className={`btn btn-secondary ${isSyncingOutlook ? 'loading' : ''}`}
-                            onClick={() => fetchOutlookEvents(selectedUser === 'all' ? user.id : selectedUser)}
+                            onClick={() => fetchOutlookEvents(selectedUser, true)}
                             disabled={isSyncingOutlook}
                             style={{ flexShrink: 0, width: 'auto' }}
                         >

@@ -1,4 +1,9 @@
 
+[functions.outlook-api]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/outlook-api/index.ts"
+
 [functions.run-sql]
 enabled = true
 verify_jwt = true

@@ -154,16 +154,17 @@ serve(async (req: Request) => {
             })
         } else if (action === 'getEvents') {
             const now = new Date()
-            const oneYearBack = new Date()
-            oneYearBack.setFullYear(now.getFullYear() - 1)
-            const sixMonthsForward = new Date()
-            sixMonthsForward.setMonth(now.getMonth() + 6)
+            const oneMonthBack = new Date()
+            oneMonthBack.setMonth(now.getMonth() - 1)
+            const threeMonthsForward = new Date()
+            threeMonthsForward.setMonth(now.getMonth() + 3)
 
-            const startStr = startDateTime || oneYearBack.toISOString()
-            const endStr = endDateTime || sixMonthsForward.toISOString()
+            const startStr = startDateTime || oneMonthBack.toISOString()
+            const endStr = endDateTime || threeMonthsForward.toISOString()
 
+            // Fetch events from the user's primary calendar
             let nextLink = `https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${startStr}&endDateTime=${endStr}&$select=subject,bodyPreview,start,end,location,attendees,isAllDay,id,transactionId&$top=100`
-            let allOutlookEvents = []
+            let allOutlookEvents: any[] = []
 
             while (nextLink) {
                 const res = await fetch(nextLink, {
@@ -180,14 +181,22 @@ serve(async (req: Request) => {
 
             console.log(`[outlook-api] Received ${allOutlookEvents.length} events from Graph for user ${userId}`)
 
+            const eventsToUpsert = []
             for (const event of allOutlookEvents) {
                 // Skip if it was created by the CRM (has localevent: prefix in transactionId)
                 if (event.transactionId?.startsWith('localevent:')) continue;
 
+                let matchedContactId = null
+                let matchedSeekerId = null
                 const attendees = event.attendees?.map((a: any) => a.emailAddress?.address) || []
-                const { contactId: matchedContactId, seekerId: matchedSeekerId } = await matchContactOrSeeker(supabase, attendees)
 
-                const { error: upsertErr } = await supabase.from('appointments').upsert({
+                if (attendees.length > 0) {
+                    const match = await matchContactOrSeeker(supabase, attendees)
+                    matchedContactId = match.contactId
+                    matchedSeekerId = match.seekerId
+                }
+
+                eventsToUpsert.push({
                     title: event.subject || '(No Title)',
                     description: event.bodyPreview || '',
                     start_time: event.start?.dateTime,
@@ -198,9 +207,15 @@ serve(async (req: Request) => {
                     recovery_seeker_id: matchedSeekerId,
                     graph_event_id: event.id,
                     is_all_day: event.isAllDay || false
-                }, { onConflict: 'graph_event_id' })
+                })
+            }
 
-                if (upsertErr) console.error(`[outlook-api] Error upserting event ${event.id}:`, upsertErr)
+            // Batch upsert into Supabase for performance
+            const chunkSize = 50
+            for (let i = 0; i < eventsToUpsert.length; i += chunkSize) {
+                const chunk = eventsToUpsert.slice(i, i + chunkSize)
+                const { error: upsertErr } = await supabase.from('appointments').upsert(chunk, { onConflict: 'graph_event_id' })
+                if (upsertErr) console.error(`[outlook-api] Error batch upserting events chunk:`, upsertErr)
             }
 
             return new Response(JSON.stringify({ success: true, count: allOutlookEvents.length }), { status: 200, headers: corsHeaders })
