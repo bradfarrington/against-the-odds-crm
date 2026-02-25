@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { getValidGraphToken } from '../_shared/outlook.ts'
+import { getSupabase, getValidGraphToken } from '../_shared/outlook.ts'
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -11,7 +11,8 @@ serve(async (req: Request) => {
 
     try {
         const payload = await req.json()
-        const { action, userId, linkedId, linkedType, toRecipients, subject, bodyHtml, messageId, ccRecipients, bccRecipients, eventId, startDateTime, endDateTime, locationStr, isAllDay } = payload
+        const { action, userId, linkedId, linkedType, toRecipients, subject, bodyHtml, messageId, ccRecipients, bccRecipients, eventId, startDateTime, endDateTime, locationStr, isAllDay, transactionId } = payload
+        const supabase = getSupabase()
 
         if (!userId) return new Response(JSON.stringify({ error: 'User ID is required' }), { status: 400, headers: corsHeaders })
 
@@ -105,7 +106,8 @@ serve(async (req: Request) => {
                 end: { dateTime: endDateTime, timeZone: 'UTC' },
                 location: { displayName: locationStr || '' },
                 isAllDay: isAllDay || false,
-                attendees: toRecipients?.map((email: string) => ({ emailAddress: { address: email }, type: 'required' })) || []
+                attendees: toRecipients?.map((email: string) => ({ emailAddress: { address: email }, type: 'required' })) || [],
+                transactionId: transactionId || undefined
             }
 
             if (linkedId) {
@@ -137,6 +139,66 @@ serve(async (req: Request) => {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${accessToken}` }
             })
+        } else if (action === 'getEvents') {
+            const now = new Date()
+            const oneYearBack = new Date()
+            oneYearBack.setFullYear(now.getFullYear() - 1)
+            const sixMonthsForward = new Date()
+            sixMonthsForward.setMonth(now.getMonth() + 6)
+
+            const startStr = startDateTime || oneYearBack.toISOString()
+            const endStr = endDateTime || sixMonthsForward.toISOString()
+
+            let nextLink = `https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${startStr}&endDateTime=${endStr}&$select=subject,bodyPreview,start,end,location,attendees,isAllDay,id,transactionId&$top=100`
+            let allOutlookEvents = []
+
+            while (nextLink) {
+                const res = await fetch(nextLink, {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                })
+                if (!res.ok) throw new Error(`Graph API error: ${await res.text()}`)
+                const data = await res.json()
+                allOutlookEvents.push(...(data.value || []))
+                nextLink = data['@odata.nextLink']
+            }
+
+            console.log(`[outlook-api] Received ${allOutlookEvents.length} events from Graph`)
+
+            for (const event of allOutlookEvents) {
+                // Skip if it was created by the CRM (has localevent: prefix in transactionId)
+                if (event.transactionId?.startsWith('localevent:')) continue;
+
+                const attendees = event.attendees?.map((a: any) => a.emailAddress?.address) || []
+                let matchedContactId = null
+                let matchedSeekerId = null
+
+                if (attendees.length > 0) {
+                    for (const email of attendees) {
+                        if (!email) continue;
+                        const { data: seeker } = await supabase.from('recovery_seekers').select('id').ilike('email', email).maybeSingle()
+                        if (seeker) { matchedSeekerId = seeker.id; break; }
+                        const { data: contact } = await supabase.from('contacts').select('id').ilike('email', email).maybeSingle()
+                        if (contact) { matchedContactId = contact.id; break; }
+                    }
+                }
+
+                const { error: upsertErr } = await supabase.from('appointments').upsert({
+                    title: event.subject || '(No Title)',
+                    description: event.bodyPreview || '',
+                    start_time: event.start?.dateTime,
+                    end_time: event.end?.dateTime,
+                    location: event.location?.displayName || '',
+                    user_id: userId,
+                    contact_id: matchedContactId,
+                    recovery_seeker_id: matchedSeekerId,
+                    graph_event_id: event.id,
+                    is_all_day: event.isAllDay || false
+                }, { onConflict: 'graph_event_id' })
+
+                if (upsertErr) console.error(`Error upserting event ${event.id}:`, upsertErr)
+            }
+
+            return new Response(JSON.stringify({ success: true, count: allOutlookEvents.length }), { status: 200, headers: corsHeaders })
         }
 
         if (graphRes && !graphRes.ok) {

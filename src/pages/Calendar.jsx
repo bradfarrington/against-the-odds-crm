@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { supabase } from '../lib/supabaseClient';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Users, Clock, MapPin, AlignLeft, Building2, User } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Users, Clock, MapPin, AlignLeft, Building2, User, Filter, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
 import CoachingSessionModal from '../components/CoachingSessionModal';
@@ -15,6 +15,7 @@ export default function Calendar() {
     const staffList = dataState.staff || [];
 
     const [appointments, setAppointments] = useState([]);
+    const [isSyncingOutlook, setIsSyncingOutlook] = useState(false);
     const [loading, setLoading] = useState(true);
 
     const navigate = useNavigate();
@@ -46,6 +47,46 @@ export default function Calendar() {
             setAppointments(data);
         }
         setLoading(false);
+
+        // Trigger Outlook sync in the background if selectedUser has a connection
+        if (selectedUser !== 'all') {
+            const { data: conn } = await supabase
+                .from('user_oauth_connections')
+                .select('id')
+                .eq('user_id', selectedUser)
+                .maybeSingle();
+
+            if (conn) {
+                fetchOutlookEvents(selectedUser);
+            }
+        }
+    };
+
+    const fetchOutlookEvents = async (uid) => {
+        if (!uid || uid === 'all') return;
+        setIsSyncingOutlook(true);
+        try {
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+            const res = await fetch(`${supabaseUrl}/functions/v1/outlook-api`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getEvents', userId: uid })
+            });
+            if (!res.ok) throw new Error(await res.text());
+
+            // Re-fetch local appointments to show newly imported ones
+            let query = supabase.from('appointments').select('*');
+            if (selectedUser !== 'all') {
+                query = query.eq('user_id', selectedUser);
+            }
+            const { data } = await query;
+            if (data) setAppointments(data);
+
+        } catch (err) {
+            console.error('[Calendar] Outlook sync failed:', err);
+        } finally {
+            setIsSyncingOutlook(false);
+        }
     };
 
     useEffect(() => {
@@ -155,7 +196,8 @@ export default function Calendar() {
                     endDateTime: endDateTime.toISOString(),
                     bodyHtml: newEvent.description,
                     locationStr: newEvent.location,
-                    isAllDay: newEvent.is_all_day
+                    isAllDay: newEvent.is_all_day,
+                    transactionId: `localevent:${crypto.randomUUID()}`
                 };
                 const res = await fetch(`${supabaseUrl}/functions/v1/outlook-api`, {
                     method: 'POST',
@@ -251,7 +293,11 @@ export default function Calendar() {
                             const tzTime = new Date(ev.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
                             let bgColor, borderLeft, textColor;
-                            if (ev.eventType === 'coaching') {
+                            if (ev.graph_event_id) {
+                                bgColor = 'rgba(0, 120, 212, 0.1)';
+                                borderLeft = '3px solid #0078D4';
+                                textColor = '#0078D4';
+                            } else if (ev.eventType === 'coaching') {
                                 bgColor = 'var(--success)';
                                 borderLeft = '3px solid rgba(34, 197, 94, 0.15)';
                                 textColor = '#000000';
@@ -466,7 +512,11 @@ export default function Calendar() {
                                     const duration = Math.max(15, endMins - startMins);
 
                                     let bgColor, borderLeftColor, textColor;
-                                    if (ev.eventType === 'coaching') {
+                                    if (ev.graph_event_id) {
+                                        bgColor = 'rgba(0, 120, 212, 0.1)';
+                                        borderLeftColor = '#0078D4';
+                                        textColor = '#0078D4';
+                                    } else if (ev.eventType === 'coaching') {
                                         bgColor = 'var(--success)';
                                         borderLeftColor = 'rgba(34, 197, 94, 0.4)';
                                         textColor = '#000000';
@@ -582,6 +632,24 @@ export default function Calendar() {
                             ))}
                         </select>
                     </div>
+
+                    {true && (
+                        <button
+                            className={`btn btn-secondary ${isSyncingOutlook ? 'loading' : ''}`}
+                            onClick={() => fetchOutlookEvents(selectedUser === 'all' ? user.id : selectedUser)}
+                            disabled={isSyncingOutlook}
+                            style={{ flexShrink: 0, width: 'auto' }}
+                        >
+                            <RefreshCw style={{
+                                width: 14,
+                                height: 14,
+                                marginRight: 8,
+                                animation: isSyncingOutlook ? 'spin 2s linear infinite' : 'none'
+                            }} />
+                            {isSyncingOutlook ? 'Syncing...' : 'Sync Outlook'}
+                        </button>
+                    )}
+
                     <button className="btn btn-primary" onClick={() => setIsModalOpen(true)} style={{ flexShrink: 0, width: 'auto', flex: 'none' }}>
                         <Plus style={{ width: 16, height: 16, marginRight: 8 }} />
                         New Event

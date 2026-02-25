@@ -43,7 +43,7 @@ export default function Settings() {
         const redirectUri = `${supabaseUrl}/functions/v1/outlook-auth`;
         const state = user.id;
 
-        const loginUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&response_mode=query&scope=offline_access%20Mail.ReadWrite%20Mail.Send%20User.Read&state=${state}&prompt=select_account`;
+        const loginUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&response_mode=query&scope=offline_access%20Calendars.ReadWrite%20Mail.ReadWrite%20Mail.Send%20User.Read&state=${state}&prompt=select_account`;
 
         window.location.href = loginUrl;
     };
