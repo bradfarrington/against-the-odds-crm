@@ -96,7 +96,37 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Failed to save connection' }), { status: 500, headers: corsHeaders })
     }
 
-    // 5. Create Graph Webhook Subscriptions for Inbox, Sent Items, and Calendar
+    // 5. Fetch and store the user's Microsoft calendar list
+    const calResponse = await fetch('https://graph.microsoft.com/v1.0/me/calendars?$select=id,name,color,isDefaultCalendar', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` }
+    })
+    if (calResponse.ok) {
+      const calData = await calResponse.json()
+      const microsoftColorMap: Record<string, string> = {
+        auto: '#0078d4', lightBlue: '#ADD8E6', lightGreen: '#90EE90',
+        lightOrange: '#FFD580', lightGray: '#D3D3D3', lightCyan: '#E0FFFF',
+        lightPink: '#FFB6C1', lightYellow: '#FFFFE0', lightTeal: '#B2DFDB',
+        lightPurple: '#E1BEE7', lightRed: '#FFCDD2'
+      }
+      const calendarsToUpsert = (calData.value || []).map((cal: any) => ({
+        user_id: userId,
+        graph_calendar_id: cal.id,
+        name: cal.name,
+        color: microsoftColorMap[cal.color] || '#0078d4',
+        is_default: cal.isDefaultCalendar === true,
+        updated_at: new Date().toISOString()
+      }))
+      if (calendarsToUpsert.length > 0) {
+        const { error: calErr } = await supabaseClient
+          .from('user_calendars')
+          .upsert(calendarsToUpsert, { onConflict: 'user_id,graph_calendar_id' })
+        if (calErr) console.error('[outlook-auth] Failed to save calendars:', calErr)
+      }
+    } else {
+      console.error('[outlook-auth] Failed to fetch calendars:', await calResponse.text())
+    }
+
+    // 6. Create Graph Webhook Subscriptions for Inbox, Sent Items, and Calendar
     const webhookUrl = Deno.env.get('OUTLOOK_WEBHOOK_URL') // Full URL to your webhook edge function
 
     if (webhookUrl) {
@@ -149,7 +179,7 @@ serve(async (req) => {
       }
     }
 
-    // 6. Redirect back to CRM settings on success
+    // 7. Redirect back to CRM settings on success
     const frontendUrl = Deno.env.get('FRONTEND_URL') || 'http://localhost:5173'
     return Response.redirect(`${frontendUrl}/settings?outlook_connected=success`, 302)
 

@@ -19,6 +19,38 @@ serve(async (req: Request) => {
             return new Response(JSON.stringify({ error: 'User ID is required' }), { status: 400, headers: corsHeaders })
         }
 
+        // Handle syncCalendars action
+        if (action === 'syncCalendars') {
+            const accessToken = await getValidGraphToken(userId)
+            const calResponse = await fetch('https://graph.microsoft.com/v1.0/me/calendars?$select=id,name,color,isDefaultCalendar', {
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            })
+            if (!calResponse.ok) {
+                const errText = await calResponse.text()
+                throw new Error(`Failed to fetch calendars: ${errText}`)
+            }
+            const calData = await calResponse.json()
+            const microsoftColorMap: Record<string, string> = {
+                auto: '#0078d4', lightBlue: '#ADD8E6', lightGreen: '#90EE90',
+                lightOrange: '#FFD580', lightGray: '#D3D3D3', lightCyan: '#E0FFFF',
+                lightPink: '#FFB6C1', lightYellow: '#FFFFE0', lightTeal: '#B2DFDB',
+                lightPurple: '#E1BEE7', lightRed: '#FFCDD2'
+            }
+            const calendarsToUpsert = (calData.value || []).map((cal: any) => ({
+                user_id: userId,
+                graph_calendar_id: cal.id,
+                name: cal.name,
+                color: microsoftColorMap[cal.color] || '#0078d4',
+                is_default: cal.isDefaultCalendar === true,
+                updated_at: new Date().toISOString()
+            }))
+            if (calendarsToUpsert.length > 0) {
+                const { error: calErr } = await supabase.from('user_calendars').upsert(calendarsToUpsert, { onConflict: 'user_id,graph_calendar_id' })
+                if (calErr) throw new Error(`Failed to save calendars: ${calErr.message}`)
+            }
+            return new Response(JSON.stringify({ success: true, count: calendarsToUpsert.length }), { status: 200, headers: corsHeaders })
+        }
+
         const accessToken = await getValidGraphToken(userId)
         let graphRes;
 
@@ -162,9 +194,37 @@ serve(async (req: Request) => {
             const startStr = startDateTime || oneMonthBack.toISOString()
             const endStr = endDateTime || threeMonthsForward.toISOString()
 
-            // Fetch events from the user's primary calendar
-            // Note: onlineMeeting is technically a property that can be expanded or selected
-            let nextLink = `https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${startStr}&endDateTime=${endStr}&$select=subject,body,bodyPreview,start,end,location,attendees,isAllDay,id,transactionId,onlineMeetingUrl,organizer,responseStatus,onlineMeeting&$top=100`
+            // Sync user's calendar list (keep it fresh on every event sync)
+            try {
+                const calRes = await fetch('https://graph.microsoft.com/v1.0/me/calendars?$select=id,name,color,isDefaultCalendar', {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                })
+                if (calRes.ok) {
+                    const calData = await calRes.json()
+                    const microsoftColorMap: Record<string, string> = {
+                        auto: '#0078d4', lightBlue: '#ADD8E6', lightGreen: '#90EE90',
+                        lightOrange: '#FFD580', lightGray: '#D3D3D3', lightCyan: '#E0FFFF',
+                        lightPink: '#FFB6C1', lightYellow: '#FFFFE0', lightTeal: '#B2DFDB',
+                        lightPurple: '#E1BEE7', lightRed: '#FFCDD2'
+                    }
+                    const calsToUpsert = (calData.value || []).map((cal: any) => ({
+                        user_id: userId,
+                        graph_calendar_id: cal.id,
+                        name: cal.name,
+                        color: microsoftColorMap[cal.color] || '#0078d4',
+                        is_default: cal.isDefaultCalendar === true,
+                        updated_at: new Date().toISOString()
+                    }))
+                    if (calsToUpsert.length > 0) {
+                        await supabase.from('user_calendars').upsert(calsToUpsert, { onConflict: 'user_id,graph_calendar_id' })
+                    }
+                }
+            } catch (calSyncErr: any) {
+                console.warn(`[outlook-api] Calendar list sync skipped: ${calSyncErr.message}`)
+            }
+
+            // Fetch events from all calendars, expanding calendar info to tag each event
+            let nextLink = `https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${startStr}&endDateTime=${endStr}&$select=subject,body,bodyPreview,start,end,location,attendees,isAllDay,id,transactionId,onlineMeetingUrl,organizer,responseStatus,onlineMeeting&$expand=calendar($select=id,isDefaultCalendar)&$top=100`
             let allOutlookEvents: any[] = []
 
             while (nextLink) {
@@ -244,6 +304,7 @@ serve(async (req: Request) => {
                     contact_id: matchedContactId,
                     recovery_seeker_id: matchedSeekerId,
                     graph_event_id: event.id,
+                    graph_calendar_id: event.calendar?.id ?? null,
                     is_all_day: isAllDay,
                     online_meeting_url: meetingUrl,
                     attendees: event.attendees || [],

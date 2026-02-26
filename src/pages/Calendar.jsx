@@ -37,6 +37,10 @@ export default function Calendar() {
     const [selectedUser, setSelectedUser] = useState('all');
     const [view, setView] = useState('month'); // 'month', 'week', 'day'
 
+    // Multi-calendar state
+    const [userCalendars, setUserCalendars] = useState([]);
+    const [enabledCalendars, setEnabledCalendars] = useState(new Set());
+
     // Popover / Interaction State
     const [selectedEventInfo, setSelectedEventInfo] = useState(null);
     const [editingWorkshop, setEditingWorkshop] = useState(null);
@@ -48,12 +52,58 @@ export default function Calendar() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [newEvent, setNewEvent] = useState({ title: '', start_time: '', durationHours: 1, durationMinutes: 0, location: '', description: '', is_all_day: false, contact_id: '', recovery_seeker_id: '', staff_id: user?.id || '' });
 
+    const fetchUserCalendars = async (uid) => {
+        if (!uid || uid === 'all') {
+            setUserCalendars([]);
+            setEnabledCalendars(new Set());
+            return;
+        }
+        const { data } = await supabase
+            .from('user_calendars')
+            .select('*')
+            .eq('user_id', uid)
+            .order('is_default', { ascending: false });
+        const cals = data || [];
+        setUserCalendars(cals);
+        setEnabledCalendars(new Set(cals.map(c => c.graph_calendar_id)));
+    };
+
     const fetchAppointments = async () => {
         setLoading(true);
+
+        const isOwnDiary = selectedUser === user?.id;
+        const isOtherUser = selectedUser !== 'all' && !isOwnDiary;
+
         let query = supabase.from('appointments').select('*');
         if (selectedUser !== 'all') {
             query = query.eq('user_id', selectedUser);
         }
+
+        // Privacy: when viewing another user's diary, only show their default calendar events
+        if (isOtherUser) {
+            const { data: defaultCal } = await supabase
+                .from('user_calendars')
+                .select('graph_calendar_id')
+                .eq('user_id', selectedUser)
+                .eq('is_default', true)
+                .maybeSingle();
+            if (defaultCal?.graph_calendar_id) {
+                query = query.or(`graph_calendar_id.is.null,graph_calendar_id.eq.${defaultCal.graph_calendar_id}`);
+            }
+        }
+
+        // Privacy: for "All Members" view, only show each user's default calendar events
+        if (selectedUser === 'all') {
+            const { data: defaultCals } = await supabase
+                .from('user_calendars')
+                .select('graph_calendar_id')
+                .eq('is_default', true);
+            const defaultCalIds = (defaultCals || []).map(c => c.graph_calendar_id).filter(Boolean);
+            if (defaultCalIds.length > 0) {
+                query = query.or(`graph_calendar_id.is.null,graph_calendar_id.in.(${defaultCalIds.join(',')})`);
+            }
+        }
+
         const { data, error } = await query;
         if (!error && data) {
             setAppointments(data);
@@ -129,13 +179,39 @@ export default function Calendar() {
                 totalDeleted += jsonRes?.deleted || 0;
             }
 
-            // Re-fetch local appointments to show newly imported ones
+            // Re-fetch local appointments to show newly imported ones (with same privacy filtering)
             let query = supabase.from('appointments').select('*');
             if (uid !== 'all') {
                 query = query.eq('user_id', uid);
             }
+            const isOtherUser = uid !== 'all' && uid !== user?.id;
+            if (isOtherUser) {
+                const { data: defaultCal } = await supabase
+                    .from('user_calendars')
+                    .select('graph_calendar_id')
+                    .eq('user_id', uid)
+                    .eq('is_default', true)
+                    .maybeSingle();
+                if (defaultCal?.graph_calendar_id) {
+                    query = query.or(`graph_calendar_id.is.null,graph_calendar_id.eq.${defaultCal.graph_calendar_id}`);
+                }
+            }
+            if (uid === 'all') {
+                const { data: defaultCals } = await supabase
+                    .from('user_calendars')
+                    .select('graph_calendar_id')
+                    .eq('is_default', true);
+                const defaultCalIds = (defaultCals || []).map(c => c.graph_calendar_id).filter(Boolean);
+                if (defaultCalIds.length > 0) {
+                    query = query.or(`graph_calendar_id.is.null,graph_calendar_id.in.(${defaultCalIds.join(',')})`);
+                }
+            }
             const { data } = await query;
-            if (data) setAppointments(data);
+            if (data) {
+                setAppointments(data);
+                // Refresh calendar list in case new calendars appeared after sync
+                if (uid !== 'all') fetchUserCalendars(uid);
+            }
 
             if (isManual) {
                 const deletedNote = totalDeleted > 0 ? `, removed ${totalDeleted} deleted` : '';
@@ -154,13 +230,24 @@ export default function Calendar() {
 
     useEffect(() => {
         fetchAppointments();
+        fetchUserCalendars(selectedUser);
     }, [selectedUser]);
 
     const allEvents = React.useMemo(() => {
-        let events = [...appointments].map(app => ({
-            ...app,
-            eventType: 'appointment'
-        }));
+        const isOwnDiary = selectedUser === user?.id;
+
+        let events = appointments
+            .filter(app => {
+                // For own diary: apply client-side calendar filter (only Outlook-tagged events are filtered)
+                if (isOwnDiary && app.graph_calendar_id && enabledCalendars.size > 0) {
+                    return enabledCalendars.has(app.graph_calendar_id);
+                }
+                return true;
+            })
+            .map(app => ({
+                ...app,
+                eventType: 'appointment'
+            }));
 
         // Add Coaching Sessions
         const seekers = dataState.recoverySeekers || [];
@@ -212,7 +299,7 @@ export default function Calendar() {
         });
 
         return events;
-    }, [appointments, dataState.recoverySeekers, dataState.preventionSchedule]);
+    }, [appointments, dataState.recoverySeekers, dataState.preventionSchedule, selectedUser, user?.id, enabledCalendars]);
 
     const handlePrev = () => {
         const newDate = new Date(currentDate);
@@ -868,6 +955,53 @@ export default function Calendar() {
                             <button className={`btn btn-sm ${view === 'day' ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => setView('day')}>Day</button>
                         </div>
                     </div>
+
+                    {/* Calendar filter chips — only shown when viewing own diary with multiple calendars */}
+                    {selectedUser === user?.id && userCalendars.length > 1 && (
+                        <div style={{
+                            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                            padding: '8px 24px', borderBottom: '1px solid var(--border)',
+                            background: 'var(--bg-main)', flexShrink: 0
+                        }}>
+                            <Filter size={13} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
+                            <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginRight: 2 }}>Calendars:</span>
+                            {userCalendars.map(cal => {
+                                const isOn = enabledCalendars.has(cal.graph_calendar_id);
+                                return (
+                                    <button
+                                        key={cal.graph_calendar_id}
+                                        onClick={() => setEnabledCalendars(prev => {
+                                            const next = new Set(prev);
+                                            if (next.has(cal.graph_calendar_id)) {
+                                                next.delete(cal.graph_calendar_id);
+                                            } else {
+                                                next.add(cal.graph_calendar_id);
+                                            }
+                                            return next;
+                                        })}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: 6,
+                                            padding: '3px 10px', borderRadius: 'var(--radius-full)',
+                                            border: `2px solid ${isOn ? cal.color : 'var(--border)'}`,
+                                            background: isOn ? `${cal.color}22` : 'transparent',
+                                            color: isOn ? cal.color : 'var(--text-secondary)',
+                                            fontSize: 12, cursor: 'pointer',
+                                            fontWeight: isOn ? 600 : 400,
+                                            transition: 'all 0.15s'
+                                        }}
+                                    >
+                                        <span style={{
+                                            width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                                            background: isOn ? cal.color : 'var(--text-muted)'
+                                        }} />
+                                        {cal.name}
+                                        {cal.is_default && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 2 }}>work</span>}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 'var(--space-md)', background: 'var(--bg-main)', minHeight: 0 }}>
                         {loading ? (
                             <div style={{ padding: 'var(--space-xl)', textAlign: 'center', color: 'var(--text-muted)' }}>Loading appointments...</div>

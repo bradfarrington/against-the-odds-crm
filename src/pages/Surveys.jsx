@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import * as api from '../lib/api';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
-import { Plus, Pencil, Trash2, Link, ClipboardList } from 'lucide-react';
+import { Plus, Pencil, Trash2, Link, ClipboardList, Search } from 'lucide-react';
 
 const STATUS_COLORS = {
     draft: 'grey',
@@ -77,21 +77,25 @@ export default function Surveys({ type }) {
     }
 
     return (
-        <div className="page-container">
+        <>
             <div className="page-header">
-                <div>
-                    <h1 className="page-title">{typeName} Surveys</h1>
-                    <p className="page-subtitle">{allSurveys.length} survey{allSurveys.length !== 1 ? 's' : ''}</p>
+                <div className="page-header-left">
+                    <h1>{typeName} Surveys</h1>
+                    <div className="page-header-subtitle">{allSurveys.length} survey{allSurveys.length !== 1 ? 's' : ''}</div>
                 </div>
                 <div className="page-header-actions">
-                    <input
-                        className="search-input"
-                        placeholder="Search surveys…"
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                    />
+                    <div className="search-input-wrapper">
+                        <Search />
+                        <input
+                            className="search-input"
+                            placeholder="Search surveys…"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                        />
+                    </div>
                     <select
-                        className="filter-select"
+                        className="form-select"
+                        style={{ flex: 1 }}
                         value={filterStatus}
                         onChange={e => setFilterStatus(e.target.value)}
                     >
@@ -106,98 +110,102 @@ export default function Surveys({ type }) {
                     </button>
                 </div>
             </div>
-
-            {/* Stat cards */}
-            <div className="stats-grid" style={{ marginBottom: 'var(--space-lg)' }}>
-                <div className="stat-card">
-                    <div className="stat-label">Draft</div>
-                    <div className="stat-value">{counts.draft}</div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-label">Active</div>
-                    <div className="stat-value" style={{ color: 'var(--success)' }}>{counts.active}</div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-label">Closed</div>
-                    <div className="stat-value">{counts.closed}</div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-label">Total</div>
-                    <div className="stat-value">{allSurveys.length}</div>
-                </div>
-            </div>
-
-            {/* Table */}
-            <div className="card">
-                {filtered.length === 0 ? (
-                    <div style={{ padding: 'var(--space-2xl)', textAlign: 'center', color: 'var(--text-muted)' }}>
-                        <ClipboardList style={{ width: 48, height: 48, marginBottom: 'var(--space-md)', opacity: 0.3 }} />
-                        <p style={{ fontWeight: 500, marginBottom: 4 }}>No surveys yet</p>
-                        <p style={{ fontSize: 13 }}>
-                            {search || filterStatus !== 'All'
-                                ? 'No surveys match your filters.'
-                                : `Create your first ${typeName.toLowerCase()} survey.`}
-                        </p>
+            <div className="page-body">
+                {/* Stat cards */}
+                <div className="stats-grid" style={{ marginBottom: 'var(--space-xl)' }}>
+                    <div className="stat-card" style={{ '--stat-accent': 'var(--text-muted)' }}>
+                        <div className="stat-card-label">Draft</div>
+                        <div className="stat-card-value" style={{ fontSize: 22, textAlign: 'center' }}>{counts.draft}</div>
                     </div>
-                ) : (
-                    <table className="data-table">
-                        <thead>
-                            <tr>
-                                <th>Title</th>
-                                <th>Status</th>
-                                <th>Questions</th>
-                                <th>Created</th>
-                                <th style={{ width: 120 }}>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filtered.map(survey => (
-                                <tr key={survey.id}>
-                                    <td>
-                                        <span
-                                            style={{ fontWeight: 500, cursor: 'pointer', color: 'var(--text-primary)' }}
-                                            onClick={() => navigate(`${basePath}/${survey.id}/edit`)}
-                                        >
-                                            {survey.title || 'Untitled Survey'}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <StatusBadge status={survey.status} color={STATUS_COLORS[survey.status]} />
-                                    </td>
-                                    <td>{survey.questionCount ?? 0}</td>
-                                    <td>{formatDate(survey.createdAt)}</td>
-                                    <td>
-                                        <div style={{ display: 'flex', gap: 4 }}>
-                                            <button
-                                                className="btn btn-ghost btn-sm btn-icon"
-                                                title="Edit survey"
-                                                onClick={() => navigate(`${basePath}/${survey.id}/edit`)}
-                                            >
-                                                <Pencil style={{ width: 14, height: 14 }} />
-                                            </button>
-                                            <button
-                                                className="btn btn-ghost btn-sm btn-icon"
-                                                title={copyMessage === survey.id ? 'Copied!' : 'Copy public link'}
-                                                onClick={() => handleCopyLink(survey)}
-                                                style={{ color: copyMessage === survey.id ? 'var(--success)' : undefined }}
-                                            >
-                                                <Link style={{ width: 14, height: 14 }} />
-                                            </button>
-                                            <button
-                                                className="btn btn-ghost btn-sm btn-icon"
-                                                title="Delete survey"
-                                                style={{ color: 'var(--danger)' }}
-                                                onClick={() => handleDelete(survey)}
-                                            >
-                                                <Trash2 style={{ width: 14, height: 14 }} />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                )}
+                    <div className="stat-card" style={{ '--stat-accent': 'var(--success)' }}>
+                        <div className="stat-card-label">Active</div>
+                        <div className="stat-card-value" style={{ fontSize: 22, textAlign: 'center', color: 'var(--success)' }}>{counts.active}</div>
+                    </div>
+                    <div className="stat-card" style={{ '--stat-accent': 'var(--danger)' }}>
+                        <div className="stat-card-label">Closed</div>
+                        <div className="stat-card-value" style={{ fontSize: 22, textAlign: 'center' }}>{counts.closed}</div>
+                    </div>
+                    <div className="stat-card" style={{ '--stat-accent': 'var(--primary)' }}>
+                        <div className="stat-card-label">Total</div>
+                        <div className="stat-card-value" style={{ fontSize: 22, textAlign: 'center' }}>{allSurveys.length}</div>
+                    </div>
+                </div>
+
+                {/* Table */}
+                <div className="card">
+                    {filtered.length === 0 ? (
+                        <div style={{ padding: 'var(--space-2xl)', textAlign: 'center', color: 'var(--text-muted)' }}>
+                            <ClipboardList style={{ width: 48, height: 48, marginBottom: 'var(--space-md)', opacity: 0.3 }} />
+                            <p style={{ fontWeight: 500, marginBottom: 4 }}>No surveys yet</p>
+                            <p style={{ fontSize: 13 }}>
+                                {search || filterStatus !== 'All'
+                                    ? 'No surveys match your filters.'
+                                    : `Create your first ${typeName.toLowerCase()} survey.`}
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="data-table-wrapper">
+                            <table className="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Title</th>
+                                        <th>Status</th>
+                                        <th>Questions</th>
+                                        <th>Created</th>
+                                        <th style={{ width: 120 }}>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filtered.map(survey => (
+                                        <tr key={survey.id}>
+                                            <td>
+                                                <span
+                                                    className="table-cell-main"
+                                                    style={{ cursor: 'pointer' }}
+                                                    onClick={() => navigate(`${basePath}/${survey.id}/edit`)}
+                                                >
+                                                    {survey.title || 'Untitled Survey'}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <StatusBadge status={survey.status} color={STATUS_COLORS[survey.status]} />
+                                            </td>
+                                            <td className="table-cell-secondary">{survey.questionCount ?? 0}</td>
+                                            <td className="table-cell-secondary">{formatDate(survey.createdAt)}</td>
+                                            <td>
+                                                <div style={{ display: 'flex', gap: 4 }}>
+                                                    <button
+                                                        className="btn btn-ghost btn-sm btn-icon"
+                                                        title="Edit survey"
+                                                        onClick={() => navigate(`${basePath}/${survey.id}/edit`)}
+                                                    >
+                                                        <Pencil style={{ width: 14, height: 14 }} />
+                                                    </button>
+                                                    <button
+                                                        className="btn btn-ghost btn-sm btn-icon"
+                                                        title={copyMessage === survey.id ? 'Copied!' : 'Copy public link'}
+                                                        onClick={() => handleCopyLink(survey)}
+                                                        style={{ color: copyMessage === survey.id ? 'var(--success)' : undefined }}
+                                                    >
+                                                        <Link style={{ width: 14, height: 14 }} />
+                                                    </button>
+                                                    <button
+                                                        className="btn btn-ghost btn-sm btn-icon"
+                                                        title="Delete survey"
+                                                        style={{ color: 'var(--danger)' }}
+                                                        onClick={() => handleDelete(survey)}
+                                                    >
+                                                        <Trash2 style={{ width: 14, height: 14 }} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* New Survey Modal */}
@@ -229,6 +237,6 @@ export default function Surveys({ type }) {
                     </div>
                 </form>
             </Modal>
-        </div>
+        </>
     );
 }
