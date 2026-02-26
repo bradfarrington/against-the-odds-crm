@@ -570,8 +570,13 @@ a:hover {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .btn-primary {
@@ -3300,7 +3305,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
   border-radius: 50%;
   background: #ffffff;
   transition: transform var(--transition-fast);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .sb-toggle.on .sb-toggle-thumb {
@@ -3416,6 +3421,97 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
   color: var(--text-muted);
 }
 
+/* ─── Layout Toggle ───────────────────────────────────── */
+
+.sb-layout-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.sb-layout-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: none;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.sb-layout-btn:first-child {
+  border-right: 1px solid var(--border);
+}
+
+.sb-layout-btn:hover {
+  background: var(--bg-card-hover);
+}
+
+.sb-layout-btn.active {
+  background: var(--primary-glow);
+  color: var(--primary);
+}
+
+/* ─── Colour Picker Row ───────────────────────────────── */
+
+.sb-colour-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.sb-colour-swatch {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  padding: 2px;
+  background: var(--bg-input);
+  flex-shrink: 0;
+}
+
+/* ─── Other Input ─────────────────────────────────────── */
+
+.sb-other-input {
+  margin-top: var(--space-xs);
+  font-size: 14px;
+  animation: sbCardFadeIn 200ms ease;
+}
+
+/* ─── Settings Section Labels ─────────────────────────── */
+
+.sb-settings-section-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: var(--space-xs);
+}
+
+/* ─── Row Layout for Preview Choices ──────────────────── */
+
+.sb-preview-choices.row {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.sb-preview-choices.row .sb-preview-choice {
+  flex: 0 0 auto;
+}
+
 /* ─── Preview Mode Transitions ────────────────────────── */
 
 .sb-preview-active .sb-left {
@@ -3471,6 +3567,144 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
   flex-shrink: 0;
 }
 
+/* ─── Device Toggle (Desktop / Mobile) ────────────────── */
+
+.sb-preview-device-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-left: var(--space-md);
+}
+
+.sb-preview-device-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border: none;
+  background: var(--bg-input);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.sb-preview-device-btn:first-child {
+  border-right: 1px solid var(--border);
+}
+
+.sb-preview-device-btn:hover {
+  color: var(--text-secondary);
+  background: var(--bg-card-hover);
+}
+
+.sb-preview-device-btn.active {
+  background: var(--primary-glow);
+  color: var(--primary);
+}
+
+/* ─── Mobile Frame ────────────────────────────────────── */
+
+.sb-preview-content--mobile {
+  display: flex;
+  justify-content: center;
+  max-width: none;
+}
+
+.sb-mobile-frame {
+  width: 375px;
+  min-height: 680px;
+  background: #1a1a2e;
+  border-radius: 40px;
+  border: 3px solid #2a2a40;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 20px 60px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.sb-mobile-frame-notch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 0 8px;
+  flex-shrink: 0;
+}
+
+.sb-mobile-frame-notch-cam {
+  width: 80px;
+  height: 24px;
+  background: #111;
+  border-radius: 14px;
+  position: relative;
+}
+
+.sb-mobile-frame-notch-cam::after {
+  content: '';
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1a2836;
+  border: 1px solid #2a3a4a;
+}
+
+.sb-mobile-frame-screen {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--bg-page);
+  border-radius: 0 0 36px 36px;
+  margin: 0 3px 3px;
+  border-radius: 4px 4px 36px 36px;
+}
+
+.sb-mobile-frame-screen .sb-preview-card {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.sb-mobile-frame-screen .sb-preview-card-body {
+  padding: var(--space-lg) var(--space-md);
+}
+
+.sb-mobile-frame-screen .sb-preview-q-label {
+  font-size: 14px;
+}
+
+.sb-mobile-frame-screen .sb-preview-question {
+  margin-bottom: var(--space-lg);
+}
+
+.sb-mobile-frame-screen .sb-preview-choice {
+  padding: 8px var(--space-sm);
+  font-size: 13px;
+}
+
+.sb-mobile-frame-screen .sb-preview-nav {
+  padding-top: var(--space-md);
+  margin-top: var(--space-md);
+}
+
+.sb-mobile-frame-home {
+  height: 6px;
+  width: 100px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-full);
+  margin: 10px auto 12px;
+  flex-shrink: 0;
+}
+
 .sb-preview-content {
   max-width: 680px;
   margin: 0 auto;
@@ -3481,7 +3715,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .sb-preview-progress-track {
@@ -3683,6 +3917,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
     opacity: 0;
     transform: translateX(16px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -3694,6 +3929,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
     opacity: 0;
     transform: translateY(8px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);

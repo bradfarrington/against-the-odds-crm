@@ -11,3 +11,10 @@ ALTER TABLE coaching_sessions
 ALTER TABLE prevention_schedule
   ADD COLUMN IF NOT EXISTS image_url text DEFAULT '',
   ADD COLUMN IF NOT EXISTS value numeric(12,2) DEFAULT 0;
+
+-- 3. Surveys — add pages (JSONB array of pages with elements) and settings (JSONB appearance config)
+--    Without these columns the survey builder save silently drops the data.
+ALTER TABLE surveys
+  ADD COLUMN IF NOT EXISTS pages jsonb DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS settings jsonb DEFAULT '{}'::jsonb;
+

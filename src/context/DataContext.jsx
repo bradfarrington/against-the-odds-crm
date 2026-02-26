@@ -424,6 +424,12 @@ export function DataProvider({ children }) {
     // Async-aware dispatch: optimistically updates local state,
     // then fires the API call. On error, reloads from DB.
     const dispatch = useCallback(async (action) => {
+        // Allow callers to skip the API call when they've already handled it
+        if (action._skipApi) {
+            rawDispatch(action);
+            return;
+        }
+
         const apiFn = apiMap[action.type];
         if (!apiFn) {
             // No API mapping (e.g. SET_DATA) — just dispatch locally

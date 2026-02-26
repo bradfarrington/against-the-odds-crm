@@ -120,14 +120,14 @@ export default function DateTimePicker({ value, onChange, required, name, mode =
         }
 
         return (
-            <div style={{ flex: 1, borderRight: '1px solid var(--border)', paddingRight: '16px' }}>
+            <div style={{ flex: 1, borderRight: mode === 'datetime' ? '1px solid var(--border)' : 'none', paddingRight: mode === 'datetime' ? '16px' : '0' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     <button type="button" className="btn btn-ghost btn-sm" onClick={() => {
                         const newDate = new Date(selectedDate);
                         newDate.setMonth(newDate.getMonth() - 1);
                         setSelectedDate(newDate); // Don't trigger onChange for just flipping months
                     }}>←</button>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
                         {selectedDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
                     </div>
                     <button type="button" className="btn btn-ghost btn-sm" onClick={() => {
@@ -152,12 +152,12 @@ export default function DateTimePicker({ value, onChange, required, name, mode =
         const minutes = [0, 15, 30, 45]; // STRICT 15 MIN INCREMENTS
 
         return (
-            <div style={{ width: '100px', paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ textAlign: 'center', fontWeight: 600, fontSize: 13, marginBottom: '4px' }}>Time</div>
+            <div style={{ width: '120px', paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ textAlign: 'center', fontWeight: 600, fontSize: 13, marginBottom: '4px', color: 'var(--text-primary)' }}>Time</div>
                 <div style={{ display: 'flex', gap: '8px', height: '180px' }}>
 
                     {/* Hours List */}
-                    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-input)', scrollbarWidth: 'none' }}>
+                    <div className="datetime-picker-scroll" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-input)', scrollbarWidth: 'none' }}>
                         {hours.map(h => {
                             const isSelected = h === selectedDate.getHours();
                             return (
@@ -174,11 +174,14 @@ export default function DateTimePicker({ value, onChange, required, name, mode =
                                         textAlign: 'center',
                                         fontSize: '13px',
                                         background: isSelected ? 'var(--primary-glow)' : 'transparent',
-                                        color: isSelected ? 'var(--primary)' : 'var(--text-primary)',
+                                        color: isSelected ? 'var(--primary)' : 'var(--text-secondary)',
                                         border: 'none',
                                         cursor: 'pointer',
-                                        fontWeight: isSelected ? '600' : '400'
+                                        fontWeight: isSelected ? '600' : '400',
+                                        transition: 'all var(--transition-fast)'
                                     }}
+                                    onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
+                                    onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
                                 >
                                     {String(h).padStart(2, '0')}
                                 </button>
@@ -187,7 +190,7 @@ export default function DateTimePicker({ value, onChange, required, name, mode =
                     </div>
 
                     {/* Minutes List */}
-                    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-input)', scrollbarWidth: 'none' }}>
+                    <div className="datetime-picker-scroll" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--bg-input)', scrollbarWidth: 'none' }}>
                         {minutes.map(m => {
                             const isSelected = m === selectedDate.getMinutes();
                             return (
@@ -204,11 +207,14 @@ export default function DateTimePicker({ value, onChange, required, name, mode =
                                         textAlign: 'center',
                                         fontSize: '13px',
                                         background: isSelected ? 'var(--primary-glow)' : 'transparent',
-                                        color: isSelected ? 'var(--primary)' : 'var(--text-primary)',
+                                        color: isSelected ? 'var(--primary)' : 'var(--text-secondary)',
                                         border: 'none',
                                         cursor: 'pointer',
-                                        fontWeight: isSelected ? '600' : '400'
+                                        fontWeight: isSelected ? '600' : '400',
+                                        transition: 'all var(--transition-fast)'
                                     }}
+                                    onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
+                                    onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
                                 >
                                     {String(m).padStart(2, '0')}
                                 </button>
@@ -281,10 +287,15 @@ export default function DateTimePicker({ value, onChange, required, name, mode =
                     boxShadow: 'var(--shadow-lg)',
                     padding: '16px',
                     display: 'flex',
-                    width: mode === 'date' ? '280px' : '380px'
+                    width: mode === 'date' ? '280px' : '400px'
                 }}>
                     {renderMonthCalendar()}
                     {mode === 'datetime' && renderTimePicker()}
+                    <style>{`
+                        .datetime-picker-scroll::-webkit-scrollbar {
+                            display: none;
+                        }
+                    `}</style>
                 </div>
             )}
         </div>

@@ -2,11 +2,13 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import * as api from '../lib/api';
+import DateTimePicker from '../components/DateTimePicker';
 import {
     ArrowLeft, Eye, EyeOff, Plus, Trash2, GripVertical,
     MessageSquare, AlignLeft, Mail, Phone, List, CheckSquare,
     ChevronDown, SlidersHorizontal, Upload, Calendar, Minus,
-    FilePlus, Check, X, MousePointerClick, Save,
+    FilePlus, Check, X, MousePointerClick, Save, Settings, Columns, Rows, Palette,
+    Smartphone, Monitor,
 } from 'lucide-react';
 
 // ─── Constants ────────────────────────────────────────────────
@@ -45,6 +47,20 @@ const TYPE_MAP = Object.fromEntries(
     QUESTION_GROUPS.flatMap(g => g.types).map(t => [t.type, t])
 );
 
+const DEFAULT_SETTINGS = {
+    fontFamily: '',
+    bgColor: '',
+    progressBarColor: '',
+};
+
+const FONT_OPTIONS = [
+    { value: '', label: 'System Default' },
+    { value: "'Inter', sans-serif", label: 'Inter' },
+    { value: "'Roboto', sans-serif", label: 'Roboto' },
+    { value: "'Outfit', sans-serif", label: 'Outfit' },
+    { value: "'Georgia', serif", label: 'Georgia' },
+];
+
 function defaultConfig(type) {
     switch (type) {
         case 'short_text':
@@ -54,6 +70,7 @@ function defaultConfig(type) {
             return { placeholder: '' };
         case 'multiple_choice':
         case 'checkboxes':
+            return { allowOther: false, layout: 'column' };
         case 'dropdown':
             return { allowOther: false };
         case 'rating_scale':
@@ -166,7 +183,7 @@ function QuestionCardPreview({ element }) {
             );
         case 'multiple_choice':
             return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+                <div style={{ display: 'flex', flexDirection: config.layout === 'row' ? 'row' : 'column', flexWrap: 'wrap', gap: config.layout === 'row' ? 8 : 4, marginTop: 4 }}>
                     {options.slice(0, 3).map((opt, i) => (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
                             <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid var(--border-light)', flexShrink: 0 }} />
@@ -178,7 +195,7 @@ function QuestionCardPreview({ element }) {
             );
         case 'checkboxes':
             return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+                <div style={{ display: 'flex', flexDirection: config.layout === 'row' ? 'row' : 'column', flexWrap: 'wrap', gap: config.layout === 'row' ? 8 : 4, marginTop: 4 }}>
                     {options.slice(0, 3).map((opt, i) => (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
                             <div style={{ width: 14, height: 14, borderRadius: 3, border: '2px solid var(--border-light)', flexShrink: 0 }} />
@@ -343,12 +360,34 @@ function EditPanel({ element, onUpdate, onDelete }) {
                             Add option
                         </button>
                         {element.type !== 'dropdown' && (
-                            <div className="sb-toggle-wrap" style={{ marginTop: 'var(--space-sm)' }} onClick={() => patchConfig('allowOther', !element.config.allowOther)}>
-                                <span className="sb-toggle-label">Allow "Other"</span>
-                                <div className={`sb-toggle${element.config.allowOther ? ' on' : ''}`}>
-                                    <div className="sb-toggle-thumb" />
+                            <>
+                                {/* Layout toggle */}
+                                <div className="form-group" style={{ marginTop: 'var(--space-sm)' }}>
+                                    <label className="form-label">Layout</label>
+                                    <div className="sb-layout-toggle">
+                                        <button
+                                            className={`sb-layout-btn${(element.config.layout || 'column') === 'column' ? ' active' : ''}`}
+                                            onClick={() => patchConfig('layout', 'column')}
+                                        >
+                                            <Columns size={13} />
+                                            Column
+                                        </button>
+                                        <button
+                                            className={`sb-layout-btn${element.config.layout === 'row' ? ' active' : ''}`}
+                                            onClick={() => patchConfig('layout', 'row')}
+                                        >
+                                            <Rows size={13} />
+                                            Row
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
+                                <div className="sb-toggle-wrap" style={{ marginTop: 'var(--space-sm)' }} onClick={() => patchConfig('allowOther', !element.config.allowOther)}>
+                                    <span className="sb-toggle-label">Allow "Other"</span>
+                                    <div className={`sb-toggle${element.config.allowOther ? ' on' : ''}`}>
+                                        <div className="sb-toggle-thumb" />
+                                    </div>
+                                </div>
+                            </>
                         )}
                     </div>
                 )}
@@ -497,15 +536,20 @@ function EditPanel({ element, onUpdate, onDelete }) {
 
 function PreviewQuestion({ element, value, onChange }) {
     const { type, label, hint, required, options = [], config = {} } = element;
+    const [otherText, setOtherText] = useState('');
 
+    // Both multiple_choice and checkboxes use array-based multi-select
     function toggleChoice(opt) {
-        if (type === 'multiple_choice') {
-            onChange(opt === value ? '' : opt);
+        const current = Array.isArray(value) ? value : (value ? [value] : []);
+        if (current.includes(opt)) {
+            onChange(current.filter(v => v !== opt));
         } else {
-            const current = Array.isArray(value) ? value : [];
-            onChange(current.includes(opt) ? current.filter(v => v !== opt) : [...current, opt]);
+            onChange([...current, opt]);
         }
     }
+
+    const isOtherSelected = (Array.isArray(value) ? value : []).includes('__other__');
+    const isRow = config.layout === 'row';
 
     return (
         <div className="sb-preview-question">
@@ -552,39 +596,50 @@ function PreviewQuestion({ element, value, onChange }) {
                         </select>
                     )}
                     {(type === 'multiple_choice' || type === 'checkboxes') && (
-                        <div className="sb-preview-choices">
-                            {options.map((opt, i) => {
-                                const isSelected = type === 'multiple_choice'
-                                    ? value === opt
-                                    : (Array.isArray(value) ? value : []).includes(opt);
-                                return (
-                                    <div
-                                        key={i}
-                                        className={`sb-preview-choice${isSelected ? ' selected' : ''}`}
-                                        onClick={() => toggleChoice(opt)}
-                                    >
+                        <>
+                            <div className={`sb-preview-choices${isRow ? ' row' : ''}`}>
+                                {options.map((opt, i) => {
+                                    const isSelected = (Array.isArray(value) ? value : []).includes(opt);
+                                    return (
+                                        <div
+                                            key={i}
+                                            className={`sb-preview-choice${isSelected ? ' selected' : ''}`}
+                                            onClick={() => toggleChoice(opt)}
+                                        >
+                                            {type === 'multiple_choice'
+                                                ? <div className="sb-preview-choice-dot" />
+                                                : <div className="sb-preview-checkbox-dot">
+                                                    {isSelected && <Check size={9} color="#fff" />}
+                                                </div>
+                                            }
+                                            {opt}
+                                        </div>
+                                    );
+                                })}
+                                {config.allowOther && (
+                                    <div className={`sb-preview-choice${isOtherSelected ? ' selected' : ''}`} onClick={() => toggleChoice('__other__')}>
                                         {type === 'multiple_choice'
                                             ? <div className="sb-preview-choice-dot" />
                                             : <div className="sb-preview-checkbox-dot">
-                                                {isSelected && <Check size={9} color="#fff" />}
+                                                {isOtherSelected && <Check size={9} color="#fff" />}
                                             </div>
                                         }
-                                        {opt}
+                                        Other
                                     </div>
-                                );
-                            })}
-                            {config.allowOther && (
-                                <div className={`sb-preview-choice${value === '__other__' ? ' selected' : ''}`} onClick={() => toggleChoice('__other__')}>
-                                    {type === 'multiple_choice'
-                                        ? <div className="sb-preview-choice-dot" />
-                                        : <div className="sb-preview-checkbox-dot">
-                                            {(Array.isArray(value) ? value : []).includes('__other__') && <Check size={9} color="#fff" />}
-                                        </div>
-                                    }
-                                    Other
-                                </div>
+                                )}
+                            </div>
+                            {config.allowOther && isOtherSelected && (
+                                <input
+                                    type="text"
+                                    className="form-input sb-other-input"
+                                    value={otherText}
+                                    onChange={e => setOtherText(e.target.value)}
+                                    placeholder="Please specify…"
+                                    onClick={e => e.stopPropagation()}
+                                    autoFocus
+                                />
                             )}
-                        </div>
+                        </>
                     )}
                     {type === 'rating_scale' && (
                         <RatingScalePreview config={config} interactive={true} />
@@ -597,11 +652,10 @@ function PreviewQuestion({ element, value, onChange }) {
                         </div>
                     )}
                     {type === 'date' && (
-                        <input
-                            type={config.includeTime ? 'datetime-local' : 'date'}
-                            className="form-input"
+                        <DateTimePicker
                             value={value || ''}
                             onChange={e => onChange(e.target.value)}
+                            mode={config.includeTime ? 'datetime' : 'date'}
                         />
                     )}
                 </>
@@ -616,26 +670,124 @@ function PreviewMode({ survey, onExit }) {
     const [previewPage, setPreviewPage] = useState(0);
     const [answers, setAnswers] = useState({});
     const [submitted, setSubmitted] = useState(false);
+    const [isMobile, setIsMobile] = useState(false);
 
+    const settings = survey.settings || {};
     const pages = survey.pages;
     const currentPage = pages[previewPage] || { elements: [] };
     const isFirst = previewPage === 0;
     const isLast = previewPage === pages.length - 1;
-    const progress = pages.length > 1 ? (previewPage / (pages.length - 1)) * 100 : submitted ? 100 : 0;
+    const progress = pages.length > 1
+        ? (submitted ? 100 : (previewPage / (pages.length - 1)) * 100)
+        : (submitted ? 100 : 0);
 
     function setAnswer(id, val) {
         setAnswers(prev => ({ ...prev, [id]: val }));
     }
 
-    // Filter out section-type elements from visible questions (they don't count as pages/navigation)
     const visibleElements = currentPage.elements;
 
+    const previewStyle = {
+        fontFamily: settings.fontFamily || undefined,
+    };
+
+    const contentBg = settings.bgColor ? { background: settings.bgColor } : {};
+    const barColor = settings.progressBarColor || 'var(--primary)';
+
+    const cardContent = (
+        <div className="sb-preview-card">
+            {/* Progress bar — always visible for multi-page */}
+            {pages.length > 1 && (
+                <div className="sb-preview-progress-track">
+                    <div
+                        className="sb-preview-progress-fill"
+                        style={{ width: `${progress}%`, background: barColor }}
+                    />
+                </div>
+            )}
+
+            <div className="sb-preview-card-body">
+                {submitted ? (
+                    <div className="sb-preview-thanks">
+                        <div className="sb-preview-thanks-icon">
+                            <Check size={26} />
+                        </div>
+                        <h2>Thank you!</h2>
+                        <p>Your response has been recorded. We appreciate you taking the time.</p>
+                        <button className="btn btn-ghost btn-sm" style={{ marginTop: 'var(--space-md)' }} onClick={() => { setSubmitted(false); setPreviewPage(0); setAnswers({}); }}>
+                            Start over
+                        </button>
+                    </div>
+                ) : (
+                    <>
+                        {visibleElements.length === 0 ? (
+                            <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-xl)', fontSize: 14 }}>
+                                This page has no questions yet.
+                            </div>
+                        ) : (
+                            visibleElements.map(el => (
+                                <PreviewQuestion
+                                    key={el.id}
+                                    element={el}
+                                    value={answers[el.id]}
+                                    onChange={val => setAnswer(el.id, val)}
+                                />
+                            ))
+                        )}
+
+                        <div className="sb-preview-nav">
+                            <div>
+                                {!isFirst && (
+                                    <button className="btn btn-ghost btn-sm" onClick={() => setPreviewPage(p => p - 1)}>
+                                        ← Back
+                                    </button>
+                                )}
+                            </div>
+                            <div>
+                                {isLast ? (
+                                    <button className="btn btn-primary" onClick={() => setSubmitted(true)}>
+                                        Submit
+                                    </button>
+                                ) : (
+                                    <button className="btn btn-primary btn-sm" onClick={() => setPreviewPage(p => p + 1)}>
+                                        Next →
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </>
+                )}
+            </div>
+        </div>
+    );
+
     return (
-        <div className="sb-preview-wrap">
+        <div className="sb-preview-wrap" style={previewStyle}>
             {/* Exit bar */}
             <div className="sb-preview-exit-bar">
                 <div className="sb-preview-dot" />
                 <span className="sb-preview-exit-label">Preview</span>
+
+                {/* Device toggle */}
+                <div className="sb-preview-device-toggle">
+                    <button
+                        className={`sb-preview-device-btn${!isMobile ? ' active' : ''}`}
+                        onClick={() => setIsMobile(false)}
+                        title="Desktop view"
+                    >
+                        <Monitor size={14} />
+                        Desktop
+                    </button>
+                    <button
+                        className={`sb-preview-device-btn${isMobile ? ' active' : ''}`}
+                        onClick={() => setIsMobile(true)}
+                        title="Mobile view"
+                    >
+                        <Smartphone size={14} />
+                        Mobile
+                    </button>
+                </div>
+
                 <div style={{ flex: 1 }} />
                 <button className="btn btn-ghost btn-sm" onClick={onExit}>
                     <EyeOff size={14} />
@@ -643,74 +795,20 @@ function PreviewMode({ survey, onExit }) {
                 </button>
             </div>
 
-            <div className="sb-preview-content">
-                <div className="sb-preview-card">
-                    {/* Progress bar */}
-                    {pages.length > 1 && (
-                        <div className="sb-preview-progress-track">
-                            <div className="sb-preview-progress-fill" style={{ width: `${progress}%` }} />
+            <div className={`sb-preview-content${isMobile ? ' sb-preview-content--mobile' : ''}`} style={contentBg}>
+                {isMobile ? (
+                    <div className="sb-mobile-frame">
+                        <div className="sb-mobile-frame-notch">
+                            <div className="sb-mobile-frame-notch-cam" />
                         </div>
-                    )}
-
-                    <div className="sb-preview-card-body">
-                        {submitted ? (
-                            <div className="sb-preview-thanks">
-                                <div className="sb-preview-thanks-icon">
-                                    <Check size={26} />
-                                </div>
-                                <h2>Thank you!</h2>
-                                <p>Your response has been recorded. We appreciate you taking the time.</p>
-                                <button className="btn btn-ghost btn-sm" style={{ marginTop: 'var(--space-md)' }} onClick={() => { setSubmitted(false); setPreviewPage(0); setAnswers({}); }}>
-                                    Start over
-                                </button>
-                            </div>
-                        ) : (
-                            <>
-                                {pages.length > 1 && (
-                                    <div className="sb-preview-page-label">
-                                        {currentPage.name || `Page ${previewPage + 1}`} of {pages.length}
-                                    </div>
-                                )}
-
-                                {visibleElements.length === 0 ? (
-                                    <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-xl)', fontSize: 14 }}>
-                                        This page has no questions yet.
-                                    </div>
-                                ) : (
-                                    visibleElements.map(el => (
-                                        <PreviewQuestion
-                                            key={el.id}
-                                            element={el}
-                                            value={answers[el.id]}
-                                            onChange={val => setAnswer(el.id, val)}
-                                        />
-                                    ))
-                                )}
-
-                                <div className="sb-preview-nav">
-                                    <div>
-                                        {!isFirst && (
-                                            <button className="btn btn-ghost btn-sm" onClick={() => setPreviewPage(p => p - 1)}>
-                                                ← Back
-                                            </button>
-                                        )}
-                                    </div>
-                                    <div>
-                                        {isLast ? (
-                                            <button className="btn btn-primary" onClick={() => setSubmitted(true)}>
-                                                Submit
-                                            </button>
-                                        ) : (
-                                            <button className="btn btn-primary btn-sm" onClick={() => setPreviewPage(p => p + 1)}>
-                                                Next →
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            </>
-                        )}
+                        <div className="sb-mobile-frame-screen">
+                            {cardContent}
+                        </div>
+                        <div className="sb-mobile-frame-home" />
                     </div>
-                </div>
+                ) : (
+                    cardContent
+                )}
             </div>
         </div>
     );
@@ -727,9 +825,11 @@ export default function SurveyBuilder() {
 
     const [survey, setSurvey] = useState(() => ({
         title: existingSurvey?.title || 'Untitled Survey',
-        pages: existingSurvey?.pages || [makePage()],
+        pages: existingSurvey?.pages?.length ? existingSurvey.pages : [makePage()],
+        settings: (existingSurvey?.settings && Object.keys(existingSurvey.settings).length) ? existingSurvey.settings : { ...DEFAULT_SETTINGS },
     }));
     const [saving, setSaving] = useState(false);
+    const [justSaved, setJustSaved] = useState(false);
 
     const [activePage, setActivePage] = useState(0);
     const [selectedId, setSelectedId] = useState(null);
@@ -737,20 +837,50 @@ export default function SurveyBuilder() {
 
     // Sync title if the survey loads from context after initial render
     useEffect(() => {
-        if (existingSurvey && survey.title === 'Untitled Survey') {
-            setSurvey(s => ({ ...s, title: existingSurvey.title, pages: existingSurvey.pages || s.pages }));
+        if (existingSurvey && survey.title === 'Untitled Survey' && existingSurvey.title !== 'Untitled Survey') {
+            setSurvey(s => ({
+                ...s,
+                title: existingSurvey.title,
+                pages: existingSurvey.pages?.length ? existingSurvey.pages : s.pages,
+                settings: (existingSurvey.settings && Object.keys(existingSurvey.settings).length) ? existingSurvey.settings : s.settings,
+            }));
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [existingSurvey?.id]);
+
+    // Auto-save logic
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            // Only save if we have an ID and things have actually changed from the existing version
+            // We do a simple stringify check for deep equality.
+            if (id && existingSurvey) {
+                const isChanged = JSON.stringify({ title: survey.title, pages: survey.pages, settings: survey.settings }) !==
+                    JSON.stringify({ title: existingSurvey.title, pages: existingSurvey.pages, settings: existingSurvey.settings });
+
+                if (isChanged) {
+                    handleSave();
+                }
+            }
+        }, 1500);
+
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [survey]);
 
     async function handleSave() {
         if (!id || saving) return;
         setSaving(true);
         try {
-            const updated = await api.modifySurvey(id, { title: survey.title, pages: survey.pages });
-            dispatch({ type: ACTIONS.UPDATE_SURVEY, payload: { ...existingSurvey, ...updated, title: survey.title, pages: survey.pages } });
+            const payload = { title: survey.title, pages: survey.pages, settings: survey.settings };
+            console.log('[SurveyBuilder] Saving survey', id, 'with', payload.pages?.length, 'pages,',
+                payload.pages?.reduce((n, p) => n + (p.elements?.length || 0), 0), 'total elements');
+            const updated = await api.modifySurvey(id, payload);
+            dispatch({ type: ACTIONS.UPDATE_SURVEY, payload: { ...existingSurvey, ...updated, title: survey.title, pages: survey.pages, settings: survey.settings }, _skipApi: true });
+            console.log('[SurveyBuilder] Survey saved successfully');
+            setJustSaved(true);
+            setTimeout(() => setJustSaved(false), 2000);
         } catch (err) {
-            console.error('Failed to save survey:', err);
+            console.error('[SurveyBuilder] Failed to save survey:', err);
         } finally {
             setSaving(false);
         }
@@ -959,12 +1089,13 @@ export default function SurveyBuilder() {
                 />
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
                     <button
-                        className="btn btn-primary btn-sm"
+                        className={`btn btn-sm ${justSaved ? 'btn-success' : 'btn-primary'}`}
                         onClick={handleSave}
                         disabled={saving}
+                        style={justSaved ? { backgroundColor: 'var(--success)', borderColor: 'var(--success)' } : {}}
                     >
-                        <Save size={14} />
-                        {saving ? 'Saving…' : 'Save'}
+                        {justSaved ? <Check size={14} /> : <Save size={14} />}
+                        {saving ? 'Saving…' : (justSaved ? 'Saved' : 'Save')}
                     </button>
                     <button
                         className={`btn btn-sm${isPreview ? ' btn-primary' : ' btn-secondary'}`}
@@ -1011,7 +1142,7 @@ export default function SurveyBuilder() {
                 {/* Canvas */}
                 <div className="sb-canvas">
                     {isPreview ? (
-                        <PreviewMode survey={survey} onExit={() => setIsPreview(false)} />
+                        <PreviewMode survey={{ ...survey, settings: survey.settings || {} }} onExit={() => setIsPreview(false)} />
                     ) : (
                         <>
                             {/* Page tabs */}
@@ -1161,9 +1292,12 @@ export default function SurveyBuilder() {
                     ) : (
                         <>
                             <div className="sb-right-header">
-                                <span className="sb-right-header-label">Survey settings</span>
+                                <Settings size={13} style={{ color: 'var(--text-muted)' }} />
+                                <span className="sb-right-header-label">Survey Settings</span>
                             </div>
                             <div className="sb-right-scroll">
+                                {/* ─── General ─── */}
+                                <div className="sb-settings-section-label">General</div>
                                 <div className="form-group">
                                     <label className="form-label">Survey title</label>
                                     <input
@@ -1182,7 +1316,85 @@ export default function SurveyBuilder() {
                                         placeholder={`Page ${activePage + 1}`}
                                     />
                                 </div>
-                                <div className="sb-right-empty" style={{ flex: 'none', paddingTop: 'var(--space-xl)' }}>
+
+                                <div className="sb-right-divider" />
+
+                                {/* ─── Appearance ─── */}
+                                <div className="sb-settings-section-label"><Palette size={12} /> Appearance</div>
+
+                                <div className="form-group">
+                                    <label className="form-label">Font family</label>
+                                    <select
+                                        className="form-select"
+                                        value={survey.settings?.fontFamily || ''}
+                                        onChange={e => setSurvey(s => ({ ...s, settings: { ...s.settings, fontFamily: e.target.value } }))}
+                                        style={{ fontSize: 13 }}
+                                    >
+                                        {FONT_OPTIONS.map(f => (
+                                            <option key={f.value} value={f.value}>{f.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="form-label">Background colour</label>
+                                    <div className="sb-colour-row">
+                                        <input
+                                            type="color"
+                                            value={survey.settings?.bgColor || '#1a1a2e'}
+                                            onChange={e => setSurvey(s => ({ ...s, settings: { ...s.settings, bgColor: e.target.value } }))}
+                                            className="sb-colour-swatch"
+                                        />
+                                        <input
+                                            className="form-input"
+                                            value={survey.settings?.bgColor || ''}
+                                            onChange={e => setSurvey(s => ({ ...s, settings: { ...s.settings, bgColor: e.target.value } }))}
+                                            placeholder="Default"
+                                            style={{ fontSize: 13, fontFamily: 'monospace', flex: 1 }}
+                                        />
+                                        {survey.settings?.bgColor && (
+                                            <button
+                                                className="btn btn-ghost btn-sm btn-icon"
+                                                onClick={() => setSurvey(s => ({ ...s, settings: { ...s.settings, bgColor: '' } }))}
+                                                title="Reset"
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="form-label">Progress bar colour</label>
+                                    <div className="sb-colour-row">
+                                        <input
+                                            type="color"
+                                            value={survey.settings?.progressBarColor || '#FF6100'}
+                                            onChange={e => setSurvey(s => ({ ...s, settings: { ...s.settings, progressBarColor: e.target.value } }))}
+                                            className="sb-colour-swatch"
+                                        />
+                                        <input
+                                            className="form-input"
+                                            value={survey.settings?.progressBarColor || ''}
+                                            onChange={e => setSurvey(s => ({ ...s, settings: { ...s.settings, progressBarColor: e.target.value } }))}
+                                            placeholder="Default (primary)"
+                                            style={{ fontSize: 13, fontFamily: 'monospace', flex: 1 }}
+                                        />
+                                        {survey.settings?.progressBarColor && (
+                                            <button
+                                                className="btn btn-ghost btn-sm btn-icon"
+                                                onClick={() => setSurvey(s => ({ ...s, settings: { ...s.settings, progressBarColor: '' } }))}
+                                                title="Reset"
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="sb-right-divider" />
+
+                                <div className="sb-right-empty" style={{ flex: 'none', paddingTop: 'var(--space-md)' }}>
                                     <MousePointerClick size={28} style={{ opacity: 0.25 }} />
                                     <p>Click a question to edit its settings</p>
                                 </div>
