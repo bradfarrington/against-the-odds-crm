@@ -1458,75 +1458,138 @@ export default function Calendar() {
                                     )}
                                 </div>
 
-                                {/* Teams Meeting Link */}
-                                {selectedEventInfo.event.online_meeting_url && (
-                                    <div style={{ marginBottom: 20 }}>
-                                        <a
-                                            href={selectedEventInfo.event.online_meeting_url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="btn btn-primary"
-                                            style={{ width: '100%', justifyContent: 'center', background: 'var(--primary)', borderColor: 'var(--primary)', color: 'white' }}
-                                        >
-                                            <Video size={16} style={{ marginRight: 8 }} />
-                                            Join Meeting
-                                        </a>
-                                    </div>
-                                )}
+                                {/* Determine user's relationship to this event */}
+                                {(() => {
+                                    const userEmail = (user?.email || '').toLowerCase();
+                                    const organiserEmail = (selectedEventInfo.event.organizer?.emailAddress?.address || '').toLowerCase();
+                                    const isOrganiser = userEmail && organiserEmail && userEmail === organiserEmail;
+                                    const attendeesList = selectedEventInfo.event.attendees || [];
+                                    const isAttendee = !isOrganiser && attendeesList.some(a =>
+                                        (a.emailAddress?.address || '').toLowerCase() === userEmail
+                                    );
+                                    const isUninvolved = !isOrganiser && !isAttendee;
 
-                                {/* Organizer & Attendees */}
-                                {(selectedEventInfo.event.organizer?.emailAddress || selectedEventInfo.event.attendees?.length > 0) && (
-                                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-                                        {/* Invitation status like Outlook */}
-                                        {selectedEventInfo.event.organizer?.emailAddress && (
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                                                <div style={{
-                                                    width: 40, height: 40, borderRadius: '50%', background: '#10B981', color: 'white',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700,
-                                                    overflow: 'hidden'
-                                                }}>
-                                                    {(selectedEventInfo.event.organizer.emailAddress.name || selectedEventInfo.event.organizer.emailAddress.address || 'U').charAt(0).toUpperCase()}
-                                                </div>
-                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                                                        {selectedEventInfo.event.organizer.emailAddress.name || selectedEventInfo.event.organizer.emailAddress.address} invited you.
-                                                    </span>
-                                                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                                                        {selectedEventInfo.event.response_status?.response === 'accepted' ? 'You accepted.' :
-                                                            selectedEventInfo.event.response_status?.response === 'tentativelyAccepted' ? 'You tentatively accepted.' :
-                                                                selectedEventInfo.event.response_status?.response === 'declined' ? 'You declined.' : 'Invitation pending.'}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        )}
+                                    // Filter the logged-in user out of the attendees display list
+                                    const otherAttendees = attendeesList.filter(a =>
+                                        (a.emailAddress?.address || '').toLowerCase() !== userEmail
+                                    );
 
-                                        {selectedEventInfo.event.attendees?.length > 0 && (
-                                            <>
-                                                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12, letterSpacing: '0.5px' }}>
-                                                    Other Participants
+                                    return (
+                                        <>
+                                            {/* Teams Meeting Link — only for organiser or attendees */}
+                                            {selectedEventInfo.event.online_meeting_url && !isUninvolved && (
+                                                <div style={{ marginBottom: 20 }}>
+                                                    <a
+                                                        href={selectedEventInfo.event.online_meeting_url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="btn btn-primary"
+                                                        style={{ width: '100%', justifyContent: 'center', background: 'var(--primary)', borderColor: 'var(--primary)', color: 'white' }}
+                                                    >
+                                                        <Video size={16} style={{ marginRight: 8 }} />
+                                                        Join Meeting
+                                                    </a>
                                                 </div>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                                    {selectedEventInfo.event.attendees?.slice(0, 4).map((attendee, idx) => (
-                                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                            )}
+
+                                            {/* Organizer & Attendees */}
+                                            {(selectedEventInfo.event.organizer?.emailAddress || otherAttendees.length > 0) && (
+                                                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+                                                    {/* Context-aware organiser display */}
+                                                    {selectedEventInfo.event.organizer?.emailAddress && (
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
                                                             <div style={{
-                                                                width: 32, height: 32, borderRadius: '50%', background: '#F1F5F9', color: '#64748B',
-                                                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600
+                                                                width: 40, height: 40, borderRadius: '50%',
+                                                                background: isOrganiser ? '#10B981' : isAttendee ? '#10B981' : '#64748B',
+                                                                color: 'white',
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700,
+                                                                overflow: 'hidden'
                                                             }}>
-                                                                {(attendee.emailAddress.name || attendee.emailAddress.address || 'A').charAt(0).toUpperCase()}
+                                                                {isOrganiser
+                                                                    ? (user?.email?.charAt(0) || 'Y').toUpperCase()
+                                                                    : (selectedEventInfo.event.organizer.emailAddress.name || selectedEventInfo.event.organizer.emailAddress.address || 'U').charAt(0).toUpperCase()
+                                                                }
                                                             </div>
-                                                            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{attendee.emailAddress.name || attendee.emailAddress.address}</span>
-                                                        </div>
-                                                    ))}
-                                                    {selectedEventInfo.event.attendees?.length > 4 && (
-                                                        <div style={{ fontSize: 11, color: 'var(--text-muted)', paddingLeft: 42 }}>
-                                                            + {selectedEventInfo.event.attendees.length - 4} more
+                                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                                {isOrganiser ? (
+                                                                    <>
+                                                                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                                                            You're the organiser
+                                                                        </span>
+                                                                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                                                                            You organised this meeting.
+                                                                        </span>
+                                                                    </>
+                                                                ) : isAttendee ? (
+                                                                    <>
+                                                                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                                                            {selectedEventInfo.event.organizer.emailAddress.name || selectedEventInfo.event.organizer.emailAddress.address} invited you.
+                                                                        </span>
+                                                                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                                                                            {selectedEventInfo.event.response_status?.response === 'accepted' ? 'You accepted.' :
+                                                                                selectedEventInfo.event.response_status?.response === 'tentativelyAccepted' ? 'You tentatively accepted.' :
+                                                                                    selectedEventInfo.event.response_status?.response === 'declined' ? 'You declined.' : 'Invitation pending.'}
+                                                                        </span>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                                                            Created by {selectedEventInfo.event.organizer.emailAddress.name || selectedEventInfo.event.organizer.emailAddress.address}
+                                                                        </span>
+                                                                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                                                                            You are not a participant in this meeting.
+                                                                        </span>
+                                                                    </>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     )}
+
+                                                    {otherAttendees.length > 0 && (
+                                                        <>
+                                                            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12, letterSpacing: '0.5px' }}>
+                                                                {isOrganiser ? 'Attendees' : 'Other Participants'}
+                                                            </div>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                                                {otherAttendees.slice(0, 4).map((attendee, idx) => {
+                                                                    const status = attendee.status?.response || attendee.responseStatus?.response;
+                                                                    const statusLabel = status === 'accepted' ? 'Accepted' :
+                                                                        status === 'tentativelyAccepted' ? 'Tentative' :
+                                                                            status === 'declined' ? 'Declined' :
+                                                                                status === 'none' ? 'No response' : null;
+                                                                    const statusColor = status === 'accepted' ? '#10B981' :
+                                                                        status === 'tentativelyAccepted' ? '#F59E0B' :
+                                                                            status === 'declined' ? '#EF4444' : '#94A3B8';
+                                                                    return (
+                                                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                                                            <div style={{
+                                                                                width: 32, height: 32, borderRadius: '50%', background: '#F1F5F9', color: '#64748B',
+                                                                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600
+                                                                            }}>
+                                                                                {(attendee.emailAddress?.name || attendee.emailAddress?.address || 'A').charAt(0).toUpperCase()}
+                                                                            </div>
+                                                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                                                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{attendee.emailAddress?.name || attendee.emailAddress?.address}</span>
+                                                                                {isOrganiser && statusLabel && (
+                                                                                    <span style={{ fontSize: 11, color: statusColor }}>{statusLabel}</span>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                                {otherAttendees.length > 4 && (
+                                                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', paddingLeft: 42 }}>
+                                                                        + {otherAttendees.length - 4} more
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </>
+                                                    )}
                                                 </div>
-                                            </>
-                                        )}
-                                    </div>
-                                )}
+                                            )}
+                                        </>
+                                    );
+                                })()}
 
                                 {/* CRM Links */}
                                 <div style={{ marginTop: 20, display: 'flex', gap: 8 }}>
