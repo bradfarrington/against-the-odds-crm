@@ -165,9 +165,9 @@ export default function WorkshopTracker() {
                     </button>
                 </div>
             </div>
-            <div className="page-body">
+            <div className="page-body page-body-kanban">
                 {/* Desktop Kanban Board */}
-                <div className="kanban-board kanban-desktop" style={{ gridTemplateColumns: `repeat(${workshopStages.length || 1}, minmax(240px, 1fr))` }}>
+                <div className="kanban-board kanban-desktop">
                     {workshopStages.map(stage => {
                         const items = workshops.filter(w => getStage(w) === stage.name);
                         return (

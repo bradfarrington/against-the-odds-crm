@@ -3,6 +3,7 @@ import { useData } from '../context/DataContext';
 import { Plus, Search, Receipt, X } from 'lucide-react';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
+import DateTimePicker from '../components/DateTimePicker';
 
 const statusMap = { Draft: 'neutral', Sent: 'info', Paid: 'success', Overdue: 'danger' };
 
@@ -175,16 +176,16 @@ export default function Invoices({ category }) {
                             <div className="form-row">
                                 <div className="form-group">
                                     <label className="form-label">Date Issued</label>
-                                    <input className="form-input" name="dateIssued" type="date" defaultValue={editItem?.dateIssued} />
+                                    <DateTimePicker name="dateIssued" mode="date" value={editItem?.dateIssued || ''} />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Date Due</label>
-                                    <input className="form-input" name="dateDue" type="date" defaultValue={editItem?.dateDue} />
+                                    <DateTimePicker name="dateDue" mode="date" value={editItem?.dateDue || ''} />
                                 </div>
                             </div>
                             <div className="form-group">
                                 <label className="form-label">Date Paid</label>
-                                <input className="form-input" name="datePaid" type="date" defaultValue={editItem?.datePaid} />
+                                <DateTimePicker name="datePaid" mode="date" value={editItem?.datePaid || ''} />
                             </div>
                             <div className="form-group">
                                 <label className="form-label">Notes</label>

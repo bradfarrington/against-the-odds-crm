@@ -23,6 +23,8 @@ import {
     Loader2,
     Menu,
     X,
+    PanelLeftClose,
+    PanelLeftOpen,
 } from 'lucide-react';
 
 const navSections = [
@@ -72,6 +74,9 @@ const navSections = [
 
 export default function Layout() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [isCollapsed, setIsCollapsed] = useState(() => {
+        try { return localStorage.getItem('sidebar-collapsed') === 'true'; } catch { return false; }
+    });
     const { theme } = useTheme();
     const { user, logout } = useAuth();
     const { state, dataLoading, dataError, reloadData } = useData();
@@ -87,6 +92,12 @@ export default function Layout() {
     const userInitials = currentStaff
         ? `${currentStaff.firstName[0]}${currentStaff.lastName[0]}`
         : userDisplayName[0]?.toUpperCase() || 'U';
+
+    const toggleCollapse = () => {
+        const next = !isCollapsed;
+        setIsCollapsed(next);
+        try { localStorage.setItem('sidebar-collapsed', String(next)); } catch { }
+    };
 
     const handleLogout = async () => {
         try {
@@ -139,10 +150,20 @@ export default function Layout() {
                 <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)} />
             )}
 
-            <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
-                <div className="sidebar-logo-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: 'var(--space-md)' }}>
+            <aside className={`sidebar ${isSidebarOpen ? 'open' : ''} ${isCollapsed ? 'collapsed' : ''}`}>
+                <div className="sidebar-logo-container" style={{ display: 'flex', alignItems: 'center', justifyContent: isCollapsed ? 'center' : 'space-between', paddingRight: isCollapsed ? 0 : 'var(--space-md)' }}>
                     <div className="sidebar-logo">
-                        <img src="/logo.png" alt="Against the Odds" style={{ width: 40, height: 40, borderRadius: 'var(--radius-md)', objectFit: 'contain' }} />
+                        <img
+                            src="/logo.png"
+                            alt="Against the Odds"
+                            style={{
+                                width: isCollapsed ? 28 : 40,
+                                height: isCollapsed ? 28 : 40,
+                                borderRadius: 'var(--radius-md)',
+                                objectFit: 'contain',
+                                transition: 'all var(--transition-normal)',
+                            }}
+                        />
                     </div>
                     <button className="btn btn-ghost btn-icon mobile-close-btn" onClick={() => setIsSidebarOpen(false)} style={{ display: 'none' }}>
                         <X style={{ width: 24, height: 24 }} />
@@ -151,29 +172,34 @@ export default function Layout() {
 
                 {/* Logged-in user */}
                 <div className="user-selector">
-                    <div className="user-selector-btn" style={{ cursor: 'default' }}>
-                        <div className="user-avatar" style={{ background: 'var(--primary)' }}>
+                    <div className="user-selector-btn" style={{ cursor: 'default', justifyContent: isCollapsed ? 'center' : undefined }}>
+                        <div className="user-avatar" style={{ background: 'var(--primary)' }} title={isCollapsed ? userDisplayName : undefined}>
                             {userInitials}
                         </div>
-                        <div className="user-selector-info">
-                            <div className="user-selector-name">{userDisplayName}</div>
-                            <div className="user-selector-role">{userRole}</div>
-                        </div>
-                        <button
-                            className="btn btn-ghost btn-sm"
-                            onClick={handleLogout}
-                            title="Sign out"
-                            style={{ padding: 6, marginLeft: 'auto' }}
-                        >
-                            <LogOut style={{ width: 14, height: 14 }} />
-                        </button>
+                        {!isCollapsed && (
+                            <>
+                                <div className="user-selector-info">
+                                    <div className="user-selector-name">{userDisplayName}</div>
+                                    <div className="user-selector-role">{userRole}</div>
+                                </div>
+                                <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={handleLogout}
+                                    title="Sign out"
+                                    style={{ padding: 6, marginLeft: 'auto' }}
+                                >
+                                    <LogOut style={{ width: 14, height: 14 }} />
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
 
                 <nav className="sidebar-nav">
                     {navSections.map((section, i) => (
                         <div key={section.label || i}>
-                            {section.label && <div className="sidebar-section-label">{section.label}</div>}
+                            {section.label && !isCollapsed && <div className="sidebar-section-label">{section.label}</div>}
+                            {section.label && isCollapsed && <div className="sidebar-section-divider" />}
                             {section.items.map(item => (
                                 <NavLink
                                     key={item.to}
@@ -181,22 +207,31 @@ export default function Layout() {
                                     end={item.to === '/'}
                                     className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                                     onClick={() => setIsSidebarOpen(false)}
+                                    title={isCollapsed ? item.label : undefined}
                                 >
                                     {item.icon}
-                                    {item.label}
+                                    {!isCollapsed && <span className="nav-link-label">{item.label}</span>}
                                 </NavLink>
                             ))}
                         </div>
                     ))}
                 </nav>
                 <div className="sidebar-footer">
-                    <NavLink to="/settings" className={({ isActive }) => `settings-link ${isActive ? 'active' : ''}`} onClick={() => setIsSidebarOpen(false)}>
+                    <NavLink to="/settings" className={({ isActive }) => `settings-link ${isActive ? 'active' : ''}`} onClick={() => setIsSidebarOpen(false)} title={isCollapsed ? 'Settings' : undefined}>
                         <Settings style={{ width: 18, height: 18 }} />
-                        Settings
+                        {!isCollapsed && 'Settings'}
                     </NavLink>
+                    <button
+                        className="sidebar-collapse-btn"
+                        onClick={toggleCollapse}
+                        title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                    >
+                        {isCollapsed ? <PanelLeftOpen style={{ width: 18, height: 18 }} /> : <PanelLeftClose style={{ width: 18, height: 18 }} />}
+                        {!isCollapsed && <span>Collapse</span>}
+                    </button>
                 </div>
             </aside>
-            <main className="main-content">
+            <main className={`main-content ${isCollapsed ? 'sidebar-collapsed' : ''}`}>
                 <Outlet />
             </main>
         </div>
