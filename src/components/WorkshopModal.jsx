@@ -5,15 +5,6 @@ import Modal from './Modal';
 import { supabase } from '../lib/supabaseClient';
 import DateTimePicker from './DateTimePicker';
 
-const STAGES = [
-    { key: 'Initial Conversation', label: 'Initial Conversation', color: 'var(--text-muted)' },
-    { key: 'Proposal', label: 'Proposal', color: 'var(--info)' },
-    { key: 'In Comms', label: 'In Comms', color: 'var(--warning)' },
-    { key: 'Session Booked', label: 'Session Booked', color: 'var(--primary)' },
-    { key: 'Post Session', label: 'Post Session', color: 'var(--success)' },
-    { key: 'Invoicing', label: 'Invoicing', color: '#a855f7' },
-];
-
 export default function WorkshopModal({ isOpen, onClose, editItem }) {
     const { state, dispatch, ACTIONS } = useData();
     const [imageUrl, setImageUrl] = useState('');
@@ -25,6 +16,8 @@ export default function WorkshopModal({ isOpen, onClose, editItem }) {
     const staff = state.staff || [];
     const companies = state.companies || [];
     const contacts = state.contacts || [];
+    const workshopStages = state.workshopStages || [];
+    const stageKeys = workshopStages.map(s => s.name);
 
     useEffect(() => {
         if (editItem) {
@@ -50,8 +43,8 @@ export default function WorkshopModal({ isOpen, onClose, editItem }) {
     }, [editItem, isOpen]);
 
     function getStage(w) {
-        if (w && STAGES.map(s => s.key).includes(w.status)) return w.status;
-        return 'Initial Conversation';
+        if (w && stageKeys.includes(w.status)) return w.status;
+        return stageKeys[0] || 'Initial Conversation';
     }
 
     const handleImageUpload = async (file) => {
@@ -137,8 +130,8 @@ export default function WorkshopModal({ isOpen, onClose, editItem }) {
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">Stage</label>
-                            <select className="form-select" name="status" defaultValue={editItem ? getStage(editItem) : 'Initial Conversation'}>
-                                {STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                            <select className="form-select" name="status" defaultValue={editItem ? getStage(editItem) : (stageKeys[0] || 'Initial Conversation')}>
+                                {workshopStages.map(s => <option key={s.name} value={s.name}>{s.label}</option>)}
                             </select>
                         </div>
                         <div className="form-group">
