@@ -43,6 +43,7 @@ export default function Calendar() {
     const [appointments, setAppointments] = useState([]);
     const [isSyncingOutlook, setIsSyncingOutlook] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
 
     const navigate = useNavigate();
 
@@ -127,7 +128,7 @@ export default function Calendar() {
         setEnabledCalendars(new Set(cals.map(c => c.graph_calendar_id)));
     };
 
-    const fetchAppointments = async () => {
+    const fetchAppointments = async ({ skipOutlookSync = false } = {}) => {
         setLoading(true);
 
         const isOwnDiary = selectedUser === user?.id;
@@ -170,7 +171,7 @@ export default function Calendar() {
         setLoading(false);
 
         // Trigger Outlook sync in the background if a specific user is selected and has a connection
-        if (selectedUser !== 'all') {
+        if (!skipOutlookSync && selectedUser !== 'all') {
             const { data: conn } = await supabase
                 .from('user_oauth_connections')
                 .select('id')
@@ -394,6 +395,8 @@ export default function Calendar() {
 
     const handleCreateEvent = async (e) => {
         e.preventDefault();
+        if (submitting) return;
+        setSubmitting(true);
 
         // Calculate end time
         let endDateTime = new Date(newEvent.start_time);
@@ -404,13 +407,14 @@ export default function Calendar() {
             endDateTime.setMinutes(endDateTime.getMinutes() + parseInt(newEvent.durationMinutes));
         }
 
-        // Try to push to Outlook if connected
-        const { data: conn } = await supabase.from('user_oauth_connections').select('id').eq('user_id', user.id).maybeSingle();
+        // Try to push to Outlook if the assigned staff member is connected
+        const assignedUserId = newEvent.staff_id || user.id;
+        const { data: conn } = await supabase.from('user_oauth_connections').select('id').eq('user_id', assignedUserId).maybeSingle();
         if (conn) {
             try {
                 const payload = {
                     action: 'createEvent',
-                    userId: user.id,
+                    userId: assignedUserId,
                     subject: newEvent.title,
                     startDateTime: new Date(newEvent.start_time).toISOString(),
                     endDateTime: endDateTime.toISOString(),
@@ -447,10 +451,11 @@ export default function Calendar() {
         if (!error) {
             setIsModalOpen(false);
             setNewEvent({ title: '', start_time: '', durationHours: 1, durationMinutes: 0, location: '', description: '', is_all_day: false, contact_id: '', recovery_seeker_id: '', staff_id: user?.id || '' });
-            fetchAppointments();
+            fetchAppointments({ skipOutlookSync: true });
         } else {
             alert('Error creating event locally: ' + error.message);
         }
+        setSubmitting(false);
     };
 
     const renderMonthGrid = () => {
@@ -1342,7 +1347,7 @@ export default function Calendar() {
                     </div>
                     <div className="modal-footer">
                         <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>Cancel</button>
-                        <button type="submit" className="btn btn-primary">Save Event</button>
+                        <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Saving...' : 'Save Event'}</button>
                     </div>
                 </form>
             </Modal>
