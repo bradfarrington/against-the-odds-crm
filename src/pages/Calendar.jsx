@@ -49,7 +49,7 @@ export default function Calendar() {
 
     // View state
     const [currentDate, setCurrentDate] = useState(new Date());
-    const [selectedUser, setSelectedUser] = useState('all');
+    const [selectedUser, setSelectedUser] = useState(user?.id || 'all');
     const [view, setView] = useState('month'); // 'month', 'week', 'day'
 
     // Multi-calendar state
@@ -110,7 +110,36 @@ export default function Calendar() {
 
     // Modal state
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [newEvent, setNewEvent] = useState({ title: '', start_time: '', durationHours: 1, durationMinutes: 0, location: '', description: '', is_all_day: false, contact_id: '', recovery_seeker_id: '', staff_id: user?.id || '' });
+    const [modalCalendars, setModalCalendars] = useState([]);
+    const [newEvent, setNewEvent] = useState({ title: '', start_time: '', durationHours: 1, durationMinutes: 0, location: '', description: '', is_all_day: false, contact_id: '', recovery_seeker_id: '', staff_id: user?.id || '', graph_calendar_id: '' });
+
+    // Fetch calendars for the staff member selected in the modal
+    const fetchModalCalendars = async (staffId) => {
+        if (!staffId) {
+            setModalCalendars([]);
+            return;
+        }
+        // Check if this staff member has an Outlook connection
+        const { data: conn } = await supabase.from('user_oauth_connections').select('id').eq('user_id', staffId).maybeSingle();
+        if (!conn) {
+            setModalCalendars([]);
+            return;
+        }
+        const { data: cals } = await supabase
+            .from('user_calendars')
+            .select('*')
+            .eq('user_id', staffId)
+            .order('is_default', { ascending: false });
+        const calList = cals || [];
+        setModalCalendars(calList);
+        // Auto-select default calendar
+        const defaultCal = calList.find(c => c.is_default);
+        if (defaultCal) {
+            setNewEvent(prev => ({ ...prev, graph_calendar_id: defaultCal.graph_calendar_id }));
+        } else if (calList.length > 0) {
+            setNewEvent(prev => ({ ...prev, graph_calendar_id: calList[0].graph_calendar_id }));
+        }
+    };
 
     const fetchUserCalendars = async (uid) => {
         if (!uid || uid === 'all') {
@@ -415,6 +444,7 @@ export default function Calendar() {
                 const payload = {
                     action: 'createEvent',
                     userId: assignedUserId,
+                    calendarId: newEvent.graph_calendar_id || null,
                     subject: newEvent.title,
                     startDateTime: new Date(newEvent.start_time).toISOString(),
                     endDateTime: endDateTime.toISOString(),
@@ -445,12 +475,14 @@ export default function Calendar() {
             is_all_day: newEvent.is_all_day,
             contact_id: newEvent.contact_id || null,
             recovery_seeker_id: newEvent.recovery_seeker_id || null,
-            user_id: newEvent.staff_id || user.id
+            user_id: newEvent.staff_id || user.id,
+            graph_calendar_id: newEvent.graph_calendar_id || null
         });
 
         if (!error) {
             setIsModalOpen(false);
-            setNewEvent({ title: '', start_time: '', durationHours: 1, durationMinutes: 0, location: '', description: '', is_all_day: false, contact_id: '', recovery_seeker_id: '', staff_id: user?.id || '' });
+            setNewEvent({ title: '', start_time: '', durationHours: 1, durationMinutes: 0, location: '', description: '', is_all_day: false, contact_id: '', recovery_seeker_id: '', staff_id: user?.id || '', graph_calendar_id: '' });
+            setModalCalendars([]);
             fetchAppointments({ skipOutlookSync: true });
         } else {
             alert('Error creating event locally: ' + error.message);
@@ -1009,7 +1041,7 @@ export default function Calendar() {
                         </button>
                     )}
 
-                    <button className="btn btn-primary" onClick={() => setIsModalOpen(true)} style={{ flexShrink: 0, width: 'auto', flex: 'none' }}>
+                    <button className="btn btn-primary" onClick={() => { setIsModalOpen(true); fetchModalCalendars(user?.id); }} style={{ flexShrink: 0, width: 'auto', flex: 'none' }}>
                         <Plus style={{ width: 16, height: 16, marginRight: 8 }} />
                         New Event
                     </button>
@@ -1308,13 +1340,29 @@ export default function Calendar() {
                         </div>
                         <div className="form-group">
                             <label className="form-label">Assigned Member *</label>
-                            <select className="form-input" required value={newEvent.staff_id} onChange={e => setNewEvent({ ...newEvent, staff_id: e.target.value })}>
+                            <select className="form-input" required value={newEvent.staff_id} onChange={e => {
+                                const staffId = e.target.value;
+                                setNewEvent({ ...newEvent, staff_id: staffId, graph_calendar_id: '' });
+                                fetchModalCalendars(staffId);
+                            }}>
                                 <option value="">Select Staff Member</option>
                                 {staffList.map(s => (
                                     <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>
                                 ))}
                             </select>
                         </div>
+                        {modalCalendars.length > 0 && (
+                            <div className="form-group">
+                                <label className="form-label">Outlook Calendar</label>
+                                <select className="form-input" value={newEvent.graph_calendar_id} onChange={e => setNewEvent({ ...newEvent, graph_calendar_id: e.target.value })}>
+                                    {modalCalendars.map(cal => (
+                                        <option key={cal.graph_calendar_id} value={cal.graph_calendar_id}>
+                                            {cal.name}{cal.is_default ? ' (Default)' : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                         <div className="form-group" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                             <input type="checkbox" id="allDay" checked={newEvent.is_all_day} onChange={e => setNewEvent({ ...newEvent, is_all_day: e.target.checked })} />
                             <label htmlFor="allDay" style={{ fontSize: 13, userSelect: 'none' }}>All Day Event</label>

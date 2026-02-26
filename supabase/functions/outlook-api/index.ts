@@ -10,7 +10,7 @@ serve(async (req: Request) => {
             action, userId, linkedId, linkedType, toRecipients,
             subject, bodyHtml, messageId, ccRecipients, bccRecipients,
             eventId, startDateTime, endDateTime, locationStr,
-            isAllDay, transactionId
+            isAllDay, transactionId, calendarId
         } = payload
 
         const supabase = getSupabase()
@@ -201,7 +201,10 @@ serve(async (req: Request) => {
             }
 
             if (action === 'createEvent') {
-                graphRes = await fetch('https://graph.microsoft.com/v1.0/me/events', {
+                const createUrl = calendarId
+                    ? `https://graph.microsoft.com/v1.0/me/calendars/${calendarId}/events`
+                    : 'https://graph.microsoft.com/v1.0/me/events'
+                graphRes = await fetch(createUrl, {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify(eventPayload)
