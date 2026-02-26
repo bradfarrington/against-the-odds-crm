@@ -305,6 +305,19 @@ export const createTaskCategory = (d) => insertRow('task_categories', d);
 export const modifyTaskCategory = (id, d) => updateRow('task_categories', id, d);
 export const removeTaskCategory = (id) => deleteRow('task_categories', id);
 
+// Workshop Stages
+export const fetchWorkshopStages = () => fetchAll('workshop_stages', 'sort_order');
+export const createWorkshopStage = (d) => insertRow('workshop_stages', d);
+export const modifyWorkshopStage = (id, d) => updateRow('workshop_stages', id, d);
+export const removeWorkshopStage = (id) => deleteRow('workshop_stages', id);
+export async function reorderWorkshopStages(updates) {
+    await Promise.all(
+        updates.map(({ id, sortOrder }) =>
+            supabase.from('workshop_stages').update({ sort_order: sortOrder }).eq('id', id)
+        )
+    );
+}
+
 // ─── Surveys ──────────────────────────────────────────────────
 
 export async function fetchSurveys(type) {

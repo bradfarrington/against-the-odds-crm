@@ -1,20 +1,41 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useData } from '../context/DataContext';
-import { Plus, Search, Building2, User, Users, PoundSterling, X, ImagePlus, Trash2, UploadCloud, Loader2 } from 'lucide-react';
+import { Plus, Search, Building2, User, Users, PoundSterling, X, ImagePlus, Trash2, UploadCloud, Loader2, GripVertical, Pencil, Check } from 'lucide-react';
+import * as api from '../lib/api';
 import Modal from '../components/Modal';
 import { supabase } from '../lib/supabaseClient';
 import WorkshopModal from '../components/WorkshopModal';
 
-const STAGES = [
-    { key: 'Initial Conversation', label: 'Initial Conversation', color: 'var(--text-muted)' },
-    { key: 'Proposal', label: 'Proposal', color: 'var(--info)' },
-    { key: 'In Comms', label: 'In Comms', color: 'var(--warning)' },
-    { key: 'Session Booked', label: 'Session Booked', color: 'var(--primary)' },
-    { key: 'Post Session', label: 'Post Session', color: 'var(--success)' },
-    { key: 'Invoicing', label: 'Invoicing', color: '#a855f7' },
+// Stages are now loaded dynamically from DataContext
+
+const PRESET_COLORS = [
+    '#ef4444', '#f97316', '#f59e0b', '#eab308',
+    '#84cc16', '#22c55e', '#14b8a6', '#06b6d4',
+    '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6',
+    '#a855f7', '#d946ef', '#ec4899', '#64748b',
 ];
 
-const STAGE_KEYS = STAGES.map(s => s.key);
+function ColorSwatchPicker({ value, onChange }) {
+    return (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {PRESET_COLORS.map(c => (
+                <button
+                    key={c}
+                    type="button"
+                    onClick={() => onChange(c)}
+                    style={{
+                        width: 24, height: 24, borderRadius: '50%', background: c,
+                        border: value === c ? '3px solid var(--text-primary)' : '2px solid var(--border)',
+                        cursor: 'pointer', padding: 0, outline: 'none',
+                        boxShadow: value === c ? '0 0 0 2px var(--bg-primary)' : 'none',
+                        transition: 'transform 0.1s, border-color 0.15s',
+                        transform: value === c ? 'scale(1.15)' : 'scale(1)',
+                    }}
+                />
+            ))}
+        </div>
+    );
+}
 
 export default function WorkshopTracker() {
     const { state, dispatch, ACTIONS } = useData();
@@ -23,6 +44,18 @@ export default function WorkshopTracker() {
     const [editItem, setEditItem] = useState(null);
     const [draggedItem, setDraggedItem] = useState(null);
     const [dragOverColumn, setDragOverColumn] = useState(null);
+    const [showStagesModal, setShowStagesModal] = useState(false);
+    const [editingStageId, setEditingStageId] = useState(null);
+    const [editLabel, setEditLabel] = useState('');
+    const [editColor, setEditColor] = useState('');
+    const [newStageLabel, setNewStageLabel] = useState('');
+    const [newStageColor, setNewStageColor] = useState('#6366f1');
+    const [showAddForm, setShowAddForm] = useState(false);
+    const [draggedStage, setDraggedStage] = useState(null);
+    const [dragOverStageId, setDragOverStageId] = useState(null);
+
+    const workshopStages = state.workshopStages || [];
+    const stageKeys = workshopStages.map(s => s.name);
 
     const staff = state.staff || [];
     const companies = state.companies || [];
@@ -37,7 +70,7 @@ export default function WorkshopTracker() {
             companyName.toLowerCase().includes(q) ||
             contactName.toLowerCase().includes(q)
         );
-    });
+    }).sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
 
     function getStaffName(id) {
         const s = staff.find(s => s.id === id);
@@ -52,10 +85,10 @@ export default function WorkshopTracker() {
         return c ? `${c.firstName} ${c.lastName}` : '';
     }
 
-    // Normalise stage — old statuses map to Initial Conversation
+    // Normalise stage — if not found, use first stage or 'Initial Conversation'
     function getStage(w) {
-        if (STAGE_KEYS.includes(w.status)) return w.status;
-        return 'Initial Conversation';
+        if (stageKeys.includes(w.status)) return w.status;
+        return stageKeys[0] || 'Initial Conversation';
     }
 
     // ─── CRUD ──────────────────────────────────────────────
@@ -124,6 +157,9 @@ export default function WorkshopTracker() {
                         <Search />
                         <input className="search-input" placeholder="Search workshops…" value={search} onChange={e => setSearch(e.target.value)} />
                     </div>
+                    <button className="btn btn-secondary" onClick={() => setShowStagesModal(true)}>
+                        Manage Stages
+                    </button>
                     <button className="btn btn-primary" onClick={() => openModal(null)}>
                         <Plus /> Add Workshop
                     </button>
@@ -131,16 +167,16 @@ export default function WorkshopTracker() {
             </div>
             <div className="page-body">
                 {/* Desktop Kanban Board */}
-                <div className="kanban-board kanban-desktop" style={{ gridTemplateColumns: `repeat(${STAGES.length}, minmax(240px, 1fr))` }}>
-                    {STAGES.map(stage => {
-                        const items = workshops.filter(w => getStage(w) === stage.key);
+                <div className="kanban-board kanban-desktop" style={{ gridTemplateColumns: `repeat(${workshopStages.length || 1}, minmax(240px, 1fr))` }}>
+                    {workshopStages.map(stage => {
+                        const items = workshops.filter(w => getStage(w) === stage.name);
                         return (
                             <div
-                                key={stage.key}
-                                className={`kanban-column${dragOverColumn === stage.key ? ' drag-over' : ''}`}
-                                onDragOver={(e) => handleDragOver(e, stage.key)}
+                                key={stage.id}
+                                className={`kanban-column${dragOverColumn === stage.name ? ' drag-over' : ''}`}
+                                onDragOver={(e) => handleDragOver(e, stage.name)}
                                 onDragLeave={handleDragLeave}
-                                onDrop={(e) => handleDrop(e, stage.key)}
+                                onDrop={(e) => handleDrop(e, stage.name)}
                             >
                                 <div className="kanban-column-header">
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
@@ -202,11 +238,11 @@ export default function WorkshopTracker() {
 
                 {/* Mobile List View */}
                 <div className="kanban-mobile-list">
-                    {STAGES.map(stage => {
-                        const items = workshops.filter(w => getStage(w) === stage.key);
+                    {workshopStages.map(stage => {
+                        const items = workshops.filter(w => getStage(w) === stage.name);
                         if (items.length === 0) return null;
                         return (
-                            <div key={stage.key} style={{ marginBottom: 'var(--space-lg)' }}>
+                            <div key={stage.id} style={{ marginBottom: 'var(--space-lg)' }}>
                                 <div className="kanban-mobile-section-header">
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
                                         <div style={{ width: 8, height: 8, borderRadius: '50%', background: stage.color, flexShrink: 0 }} />
@@ -255,6 +291,173 @@ export default function WorkshopTracker() {
                 onClose={closeModal}
                 editItem={editItem}
             />
+
+            {/* Manage Stages Modal */}
+            <Modal
+                isOpen={showStagesModal}
+                onClose={() => { setShowStagesModal(false); setEditingStageId(null); setShowAddForm(false); }}
+                title="Manage Workshop Stages"
+                width={520}
+            >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+                    <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>Drag stages to reorder. Changes are saved automatically.</p>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {workshopStages.map((stage) => (
+                            <div
+                                key={stage.id}
+                                draggable
+                                onDragStart={(e) => {
+                                    setDraggedStage(stage);
+                                    e.dataTransfer.effectAllowed = 'move';
+                                    e.dataTransfer.setData('text/plain', stage.id);
+                                }}
+                                onDragOver={(e) => { e.preventDefault(); setDragOverStageId(stage.id); }}
+                                onDragLeave={() => setDragOverStageId(null)}
+                                onDrop={async (e) => {
+                                    e.preventDefault();
+                                    setDragOverStageId(null);
+                                    if (!draggedStage || draggedStage.id === stage.id) return;
+                                    const ordered = [...workshopStages];
+                                    const fromIdx = ordered.findIndex(s => s.id === draggedStage.id);
+                                    const toIdx = ordered.findIndex(s => s.id === stage.id);
+                                    const [moved] = ordered.splice(fromIdx, 1);
+                                    ordered.splice(toIdx, 0, moved);
+                                    const updates = ordered.map((s, i) => ({ id: s.id, sortOrder: i }));
+                                    // Optimistically update local state
+                                    dispatch({ type: ACTIONS.SET_DATA, payload: { workshopStages: ordered.map((s, i) => ({ ...s, sortOrder: i })) }, _skipApi: true });
+                                    await api.reorderWorkshopStages(updates);
+                                    setDraggedStage(null);
+                                }}
+                                onDragEnd={() => { setDraggedStage(null); setDragOverStageId(null); }}
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: 'var(--space-sm)',
+                                    padding: '10px 12px', borderRadius: 'var(--radius-md)',
+                                    background: 'var(--bg-secondary)',
+                                    border: dragOverStageId === stage.id ? '2px dashed var(--primary)' : '2px solid transparent',
+                                    cursor: 'grab', transition: 'border-color 0.15s, background 0.15s',
+                                    opacity: draggedStage?.id === stage.id ? 0.5 : 1,
+                                }}
+                            >
+                                <GripVertical size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+
+                                {editingStageId === stage.id ? (
+                                    /* ── Inline Edit Mode ── */
+                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                                            <div style={{ width: 16, height: 16, borderRadius: '50%', background: editColor, flexShrink: 0, border: '2px solid var(--border)' }} />
+                                            <input
+                                                className="form-input"
+                                                value={editLabel}
+                                                onChange={e => setEditLabel(e.target.value)}
+                                                autoFocus
+                                                onKeyDown={async (e) => {
+                                                    if (e.key === 'Enter') {
+                                                        await dispatch({ type: ACTIONS.UPDATE_WORKSHOP_STAGE, payload: { id: stage.id, label: editLabel, color: editColor } });
+                                                        setEditingStageId(null);
+                                                    }
+                                                    if (e.key === 'Escape') setEditingStageId(null);
+                                                }}
+                                                style={{ flex: 1, fontSize: 13, padding: '4px 8px' }}
+                                            />
+                                            <button
+                                                className="btn btn-primary btn-sm"
+                                                onClick={async () => {
+                                                    await dispatch({ type: ACTIONS.UPDATE_WORKSHOP_STAGE, payload: { id: stage.id, label: editLabel, color: editColor } });
+                                                    setEditingStageId(null);
+                                                }}
+                                            >
+                                                <Check size={14} />
+                                            </button>
+                                            <button className="btn btn-secondary btn-sm" onClick={() => setEditingStageId(null)}>
+                                                <X size={14} />
+                                            </button>
+                                        </div>
+                                        <ColorSwatchPicker value={editColor} onChange={setEditColor} />
+                                    </div>
+                                ) : (
+                                    /* ── Display Mode ── */
+                                    <>
+                                        <div style={{ width: 16, height: 16, borderRadius: '50%', background: stage.color, flexShrink: 0, border: '2px solid var(--border)' }} />
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontWeight: 500, fontSize: 13 }}>{stage.label}</div>
+                                        </div>
+                                        <button
+                                            className="btn btn-secondary btn-sm"
+                                            style={{ padding: '4px 6px' }}
+                                            onClick={(e) => { e.stopPropagation(); setEditingStageId(stage.id); setEditLabel(stage.label); setEditColor(stage.color.startsWith('#') ? stage.color : '#6366f1'); }}
+                                        >
+                                            <Pencil size={13} />
+                                        </button>
+                                        <button
+                                            className="btn btn-secondary btn-sm"
+                                            style={{ padding: '4px 6px', color: 'var(--danger)' }}
+                                            onClick={async (e) => {
+                                                e.stopPropagation();
+                                                await dispatch({ type: ACTIONS.DELETE_WORKSHOP_STAGE, payload: stage.id });
+                                            }}
+                                        >
+                                            <Trash2 size={13} />
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* ── Add New Stage Form ── */}
+                    {showAddForm ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)', padding: 'var(--space-md)', borderRadius: 'var(--radius-md)', background: 'var(--bg-secondary)' }}>
+                            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>New Stage</div>
+                            <input
+                                className="form-input"
+                                placeholder="Stage name…"
+                                value={newStageLabel}
+                                onChange={e => setNewStageLabel(e.target.value)}
+                                autoFocus
+                                onKeyDown={async (e) => {
+                                    if (e.key === 'Enter' && newStageLabel.trim()) {
+                                        const name = newStageLabel.trim();
+                                        await dispatch({
+                                            type: ACTIONS.ADD_WORKSHOP_STAGE,
+                                            payload: { name, label: name, color: newStageColor, sortOrder: workshopStages.length }
+                                        });
+                                        setNewStageLabel(''); setNewStageColor('#6366f1'); setShowAddForm(false);
+                                    }
+                                    if (e.key === 'Escape') { setShowAddForm(false); setNewStageLabel(''); }
+                                }}
+                                style={{ fontSize: 13 }}
+                            />
+                            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>Pick a colour</div>
+                            <ColorSwatchPicker value={newStageColor} onChange={setNewStageColor} />
+                            <div style={{ display: 'flex', gap: 'var(--space-sm)', justifyContent: 'flex-end' }}>
+                                <button className="btn btn-secondary btn-sm" onClick={() => { setShowAddForm(false); setNewStageLabel(''); }}>
+                                    Cancel
+                                </button>
+                                <button
+                                    className="btn btn-primary btn-sm"
+                                    disabled={!newStageLabel.trim()}
+                                    onClick={async () => {
+                                        const name = newStageLabel.trim();
+                                        if (!name) return;
+                                        await dispatch({
+                                            type: ACTIONS.ADD_WORKSHOP_STAGE,
+                                            payload: { name, label: name, color: newStageColor, sortOrder: workshopStages.length }
+                                        });
+                                        setNewStageLabel(''); setNewStageColor('#6366f1'); setShowAddForm(false);
+                                    }}
+                                >
+                                    <Plus size={14} /> Add Stage
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <button className="btn btn-secondary" style={{ width: '100%' }} onClick={() => setShowAddForm(true)}>
+                            <Plus size={16} /> Add New Stage
+                        </button>
+                    )}
+                </div>
+            </Modal>
         </>
     );
 }

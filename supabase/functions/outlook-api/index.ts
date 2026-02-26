@@ -22,7 +22,18 @@ serve(async (req: Request) => {
         // Handle syncCalendars action
         if (action === 'syncCalendars') {
             const accessToken = await getValidGraphToken(userId)
-            const calResponse = await fetch('https://graph.microsoft.com/v1.0/me/calendars?$select=id,name,color,isDefaultCalendar', {
+
+            // Fetch the authenticated user's email to identify owned vs shared calendars
+            const meRes = await fetch('https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName', {
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            })
+            let userEmail = ''
+            if (meRes.ok) {
+                const meData = await meRes.json()
+                userEmail = (meData.mail || meData.userPrincipalName || '').toLowerCase()
+            }
+
+            const calResponse = await fetch('https://graph.microsoft.com/v1.0/me/calendars?$select=id,name,color,isDefaultCalendar,owner', {
                 headers: { 'Authorization': `Bearer ${accessToken}` }
             })
             if (!calResponse.ok) {
@@ -31,12 +42,27 @@ serve(async (req: Request) => {
             }
             const calData = await calResponse.json()
             const microsoftColorMap: Record<string, string> = {
-                auto: '#0078d4', lightBlue: '#ADD8E6', lightGreen: '#90EE90',
-                lightOrange: '#FFD580', lightGray: '#D3D3D3', lightCyan: '#E0FFFF',
-                lightPink: '#FFB6C1', lightYellow: '#FFFFE0', lightTeal: '#B2DFDB',
-                lightPurple: '#E1BEE7', lightRed: '#FFCDD2'
+                auto: '#0078D4',
+                lightBlue: '#0078D4',
+                lightGreen: '#498205',
+                lightOrange: '#DA3B01',
+                lightGray: '#69797E',
+                lightYellow: '#986F0B',
+                lightTeal: '#038387',
+                lightPink: '#E3008C',
+                lightBrown: '#8E562E',
+                lightRed: '#D13438',
+                maxColor: '#8764B8',
+                lightCyan: '#0099BC',
+                lightPurple: '#8764B8'
             }
-            const calendarsToUpsert = (calData.value || []).map((cal: any) => ({
+            // Filter out shared/delegated calendars — only keep calendars owned by this user
+            const ownedCals = (calData.value || []).filter((cal: any) => {
+                const ownerEmail = (cal.owner?.address || '').toLowerCase()
+                // Keep if no owner info (shouldn't happen), or owner matches user
+                return !ownerEmail || !userEmail || ownerEmail === userEmail
+            })
+            const calendarsToUpsert = ownedCals.map((cal: any) => ({
                 user_id: userId,
                 graph_calendar_id: cal.id,
                 name: cal.name,
@@ -47,6 +73,14 @@ serve(async (req: Request) => {
             if (calendarsToUpsert.length > 0) {
                 const { error: calErr } = await supabase.from('user_calendars').upsert(calendarsToUpsert, { onConflict: 'user_id,graph_calendar_id' })
                 if (calErr) throw new Error(`Failed to save calendars: ${calErr.message}`)
+            }
+            // Clean up any previously-synced shared calendars that are no longer in the owned list
+            const ownedCalIds = ownedCals.map((cal: any) => cal.id)
+            if (ownedCalIds.length > 0) {
+                await supabase.from('user_calendars')
+                    .delete()
+                    .eq('user_id', userId)
+                    .not('graph_calendar_id', 'in', `(${ownedCalIds.join(',')})`)
             }
             return new Response(JSON.stringify({ success: true, count: calendarsToUpsert.length }), { status: 200, headers: corsHeaders })
         }
@@ -194,20 +228,50 @@ serve(async (req: Request) => {
             const startStr = startDateTime || oneMonthBack.toISOString()
             const endStr = endDateTime || threeMonthsForward.toISOString()
 
-            // Sync user's calendar list (keep it fresh on every event sync)
+            // Fetch the authenticated user's email to identify owned vs shared calendars
+            let userEmail = ''
             try {
-                const calRes = await fetch('https://graph.microsoft.com/v1.0/me/calendars?$select=id,name,color,isDefaultCalendar', {
+                const meRes = await fetch('https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName', {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                })
+                if (meRes.ok) {
+                    const meData = await meRes.json()
+                    userEmail = (meData.mail || meData.userPrincipalName || '').toLowerCase()
+                }
+            } catch (e: any) {
+                console.warn(`[outlook-api] Could not fetch user email: ${e.message}`)
+            }
+
+            // Sync user's calendar list (keep it fresh on every event sync)
+            let ownedCalendarIds: string[] = []
+            try {
+                const calRes = await fetch('https://graph.microsoft.com/v1.0/me/calendars?$select=id,name,color,isDefaultCalendar,owner', {
                     headers: { 'Authorization': `Bearer ${accessToken}` }
                 })
                 if (calRes.ok) {
                     const calData = await calRes.json()
                     const microsoftColorMap: Record<string, string> = {
-                        auto: '#0078d4', lightBlue: '#ADD8E6', lightGreen: '#90EE90',
-                        lightOrange: '#FFD580', lightGray: '#D3D3D3', lightCyan: '#E0FFFF',
-                        lightPink: '#FFB6C1', lightYellow: '#FFFFE0', lightTeal: '#B2DFDB',
-                        lightPurple: '#E1BEE7', lightRed: '#FFCDD2'
+                        auto: '#0078D4',
+                        lightBlue: '#0078D4',
+                        lightGreen: '#498205',
+                        lightOrange: '#DA3B01',
+                        lightGray: '#69797E',
+                        lightYellow: '#986F0B',
+                        lightTeal: '#038387',
+                        lightPink: '#E3008C',
+                        lightBrown: '#8E562E',
+                        lightRed: '#D13438',
+                        maxColor: '#8764B8',
+                        lightCyan: '#0099BC',
+                        lightPurple: '#8764B8'
                     }
-                    const calsToUpsert = (calData.value || []).map((cal: any) => ({
+                    // Filter out shared/delegated calendars
+                    const ownedCals = (calData.value || []).filter((cal: any) => {
+                        const ownerEmail = (cal.owner?.address || '').toLowerCase()
+                        return !ownerEmail || !userEmail || ownerEmail === userEmail
+                    })
+                    ownedCalendarIds = ownedCals.map((cal: any) => cal.id)
+                    const calsToUpsert = ownedCals.map((cal: any) => ({
                         user_id: userId,
                         graph_calendar_id: cal.id,
                         name: cal.name,
@@ -218,29 +282,47 @@ serve(async (req: Request) => {
                     if (calsToUpsert.length > 0) {
                         await supabase.from('user_calendars').upsert(calsToUpsert, { onConflict: 'user_id,graph_calendar_id' })
                     }
+                    // Clean up any previously-synced shared calendars
+                    if (ownedCalendarIds.length > 0) {
+                        await supabase.from('user_calendars')
+                            .delete()
+                            .eq('user_id', userId)
+                            .not('graph_calendar_id', 'in', `(${ownedCalendarIds.join(',')})`)
+                    }
                 }
             } catch (calSyncErr: any) {
                 console.warn(`[outlook-api] Calendar list sync skipped: ${calSyncErr.message}`)
             }
 
-            // Fetch events from all calendars, expanding calendar info to tag each event
-            let nextLink = `https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${startStr}&endDateTime=${endStr}&$select=subject,body,bodyPreview,start,end,location,attendees,isAllDay,id,transactionId,onlineMeetingUrl,organizer,responseStatus,onlineMeeting&$expand=calendar($select=id,isDefaultCalendar)&$top=100`
+            // Fetch events per-calendar to ensure correct graph_calendar_id tagging
+            // (calendarView merges all calendars and can lose calendar context)
             let allOutlookEvents: any[] = []
+            const calendarsToFetch = ownedCalendarIds.length > 0 ? ownedCalendarIds : ['default']
 
-            while (nextLink) {
-                const res = await fetch(nextLink, {
-                    headers: { 'Authorization': `Bearer ${accessToken}` }
-                })
-                if (!res.ok) {
-                    const errText = await res.text()
-                    throw new Error(`Graph API fetch events error: ${errText}`)
+            for (const calId of calendarsToFetch) {
+                const basePath = calId === 'default'
+                    ? `https://graph.microsoft.com/v1.0/me/calendarView`
+                    : `https://graph.microsoft.com/v1.0/me/calendars/${calId}/calendarView`
+                let nextLink: string | null = `${basePath}?startDateTime=${startStr}&endDateTime=${endStr}&$select=subject,body,bodyPreview,start,end,location,attendees,isAllDay,id,transactionId,onlineMeetingUrl,organizer,responseStatus,onlineMeeting&$top=100`
+
+                while (nextLink) {
+                    const res = await fetch(nextLink, {
+                        headers: { 'Authorization': `Bearer ${accessToken}` }
+                    })
+                    if (!res.ok) {
+                        const errText = await res.text()
+                        console.error(`[outlook-api] Error fetching events for calendar ${calId}: ${errText}`)
+                        break // Skip this calendar but continue with others
+                    }
+                    const data = await res.json()
+                    // Tag each event with its calendar ID
+                    const events = (data.value || []).map((ev: any) => ({ ...ev, _calendarId: calId === 'default' ? null : calId }))
+                    allOutlookEvents.push(...events)
+                    nextLink = data['@odata.nextLink'] || null
                 }
-                const data = await res.json()
-                allOutlookEvents.push(...(data.value || []))
-                nextLink = data['@odata.nextLink']
             }
 
-            console.log(`[outlook-api] Received ${allOutlookEvents.length} events from Graph for user ${userId}`)
+            console.log(`[outlook-api] Received ${allOutlookEvents.length} events from ${calendarsToFetch.length} calendar(s) for user ${userId}`)
 
             const eventsToUpsert = []
             for (const event of allOutlookEvents) {
@@ -304,7 +386,7 @@ serve(async (req: Request) => {
                     contact_id: matchedContactId,
                     recovery_seeker_id: matchedSeekerId,
                     graph_event_id: event.id,
-                    graph_calendar_id: event.calendar?.id ?? null,
+                    graph_calendar_id: event._calendarId ?? event.calendar?.id ?? null,
                     is_all_day: isAllDay,
                     online_meeting_url: meetingUrl,
                     attendees: event.attendees || [],

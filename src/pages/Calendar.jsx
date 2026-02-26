@@ -9,6 +9,20 @@ import CoachingSessionModal from '../components/CoachingSessionModal';
 import WorkshopModal from '../components/WorkshopModal';
 import DateTimePicker from '../components/DateTimePicker';
 
+// Staff color palette for All Members view
+const STAFF_COLORS = [
+    '#6366F1', // Indigo
+    '#EC4899', // Pink
+    '#F59E0B', // Amber
+    '#10B981', // Emerald
+    '#3B82F6', // Blue
+    '#EF4444', // Red
+    '#8B5CF6', // Violet
+    '#14B8A6', // Teal
+    '#F97316', // Orange
+    '#06B6D4', // Cyan
+];
+
 // Add animation keyframes for the popover
 if (typeof document !== 'undefined') {
     const style = document.createElement('style');
@@ -40,6 +54,51 @@ export default function Calendar() {
     // Multi-calendar state
     const [userCalendars, setUserCalendars] = useState([]);
     const [enabledCalendars, setEnabledCalendars] = useState(new Set());
+
+    // Staff member filter state (for All Members view)
+    const [enabledStaff, setEnabledStaff] = useState(new Set());
+
+    // Staff color overrides (persisted in localStorage)
+    const [staffColorOverrides, setStaffColorOverrides] = useState(() => {
+        try {
+            return JSON.parse(localStorage.getItem('staffColorOverrides') || '{}');
+        } catch { return {}; }
+    });
+    const [colorPickerStaffId, setColorPickerStaffId] = useState(null);
+    const [colorPickerCalId, setColorPickerCalId] = useState(null);
+    const colorPickerRef = useRef(null);
+
+    // Persist color overrides
+    useEffect(() => {
+        localStorage.setItem('staffColorOverrides', JSON.stringify(staffColorOverrides));
+    }, [staffColorOverrides]);
+
+    // Close color picker on outside click
+    useEffect(() => {
+        if (!colorPickerStaffId && !colorPickerCalId) return;
+        const handleClick = (e) => {
+            if (colorPickerRef.current && !colorPickerRef.current.contains(e.target)) {
+                setColorPickerStaffId(null);
+                setColorPickerCalId(null);
+            }
+        };
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, [colorPickerStaffId, colorPickerCalId]);
+
+    // Helper: get color for a staff member (override or default)
+    const getStaffColor = (staffId) => {
+        if (staffColorOverrides[staffId]) return staffColorOverrides[staffId];
+        const idx = staffList.findIndex(s => s.id === staffId);
+        return STAFF_COLORS[idx >= 0 ? idx % STAFF_COLORS.length : 0];
+    };
+
+    // Helper: get color for an event based on its calendar
+    const getCalendarColor = (graphCalendarId) => {
+        if (!graphCalendarId || userCalendars.length === 0) return null;
+        const cal = userCalendars.find(c => c.graph_calendar_id === graphCalendarId);
+        return cal?.color || null;
+    };
 
     // Popover / Interaction State
     const [selectedEventInfo, setSelectedEventInfo] = useState(null);
@@ -231,16 +290,25 @@ export default function Calendar() {
     useEffect(() => {
         fetchAppointments();
         fetchUserCalendars(selectedUser);
+        // Initialize enabledStaff with all staff when switching to 'all'
+        if (selectedUser === 'all') {
+            setEnabledStaff(new Set(staffList.map(s => s.id)));
+        }
     }, [selectedUser]);
 
     const allEvents = React.useMemo(() => {
         const isOwnDiary = selectedUser === user?.id;
+        const isAllMembers = selectedUser === 'all';
 
         let events = appointments
             .filter(app => {
                 // For own diary: apply client-side calendar filter (only Outlook-tagged events are filtered)
-                if (isOwnDiary && app.graph_calendar_id && enabledCalendars.size > 0) {
+                if (isOwnDiary && app.graph_calendar_id && userCalendars.length > 0) {
                     return enabledCalendars.has(app.graph_calendar_id);
+                }
+                // For All Members view: filter by enabled staff
+                if (isAllMembers && app.user_id) {
+                    return enabledStaff.has(app.user_id);
                 }
                 return true;
             })
@@ -299,7 +367,7 @@ export default function Calendar() {
         });
 
         return events;
-    }, [appointments, dataState.recoverySeekers, dataState.preventionSchedule, selectedUser, user?.id, enabledCalendars]);
+    }, [appointments, dataState.recoverySeekers, dataState.preventionSchedule, selectedUser, user?.id, enabledCalendars, userCalendars, enabledStaff]);
 
     const handlePrev = () => {
         const newDate = new Date(currentDate);
@@ -451,10 +519,16 @@ export default function Calendar() {
                             const tzTime = new Date(ev.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
                             let bgColor, borderLeft, textColor;
-                            if (ev.graph_event_id) {
-                                bgColor = '#ADD8E6';
-                                borderLeft = '3px solid #0078D4';
-                                textColor = '#004085';
+                            if (selectedUser === 'all' && ev.user_id) {
+                                const sc = getStaffColor(ev.user_id);
+                                bgColor = sc;
+                                borderLeft = `3px solid rgba(0,0,0,0.15)`;
+                                textColor = '#ffffff';
+                            } else if (ev.graph_event_id) {
+                                const calColor = getCalendarColor(ev.graph_calendar_id);
+                                bgColor = calColor || '#0078D4';
+                                borderLeft = `3px solid ${calColor ? 'rgba(0,0,0,0.15)' : '#005a9e'}`;
+                                textColor = '#ffffff';
                             } else if (ev.eventType === 'coaching') {
                                 bgColor = 'var(--success)';
                                 borderLeft = '3px solid rgba(34, 197, 94, 0.15)';
@@ -510,20 +584,38 @@ export default function Calendar() {
 
         return (
             <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(7, 1fr)',
-                gridTemplateRows: `auto repeat(${weeksCount}, 1fr)`,
-                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
                 flex: 1,
                 border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-lg)',
                 overflow: 'hidden',
-                background: 'var(--bg-card)'
+                background: 'var(--bg-card)',
+                minHeight: 0
             }}>
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                    <div key={d} style={{ textAlign: 'center', fontWeight: 600, fontSize: 12, padding: '12px 0', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>{d.toUpperCase()}</div>
-                ))}
-                {days}
+                {/* Fixed day-name header */}
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(7, 1fr)',
+                    flexShrink: 0,
+                    borderBottom: '1px solid var(--border)',
+                    background: 'var(--bg-main)'
+                }}>
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                        <div key={d} style={{ textAlign: 'center', fontWeight: 600, fontSize: 12, padding: '12px 0', color: 'var(--text-muted)' }}>{d.toUpperCase()}</div>
+                    ))}
+                </div>
+                {/* Scrollable grid body */}
+                <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(7, 1fr)',
+                        gridTemplateRows: `repeat(${weeksCount}, 1fr)`,
+                        minHeight: '100%'
+                    }}>
+                        {days}
+                    </div>
+                </div>
             </div>
         );
     };
@@ -657,7 +749,13 @@ export default function Calendar() {
                                         const left = (ev.startDayIndex / daysData.length) * 100;
                                         const width = ((ev.endDayIndex - ev.startDayIndex + 1) / daysData.length) * 100;
                                         let bgColor = '#ffffff', borderLeftColor = '#e0e0e0', textColor = '#000000';
-                                        if (ev.graph_event_id) { bgColor = '#ADD8E6'; borderLeftColor = '#0078D4'; textColor = '#004085'; }
+                                        if (selectedUser === 'all' && ev.user_id) {
+                                            const sc = getStaffColor(ev.user_id);
+                                            bgColor = sc; borderLeftColor = 'rgba(0,0,0,0.15)'; textColor = '#ffffff';
+                                        } else if (ev.graph_event_id) {
+                                            const calColor = getCalendarColor(ev.graph_calendar_id);
+                                            bgColor = calColor || '#0078D4'; borderLeftColor = calColor ? 'rgba(0,0,0,0.15)' : '#005a9e'; textColor = '#ffffff';
+                                        }
                                         else if (ev.eventType === 'coaching') { bgColor = 'var(--success)'; borderLeftColor = 'rgba(34,197,94,0.4)'; }
                                         else if (ev.eventType === 'workshop') { bgColor = 'var(--primary-light)'; borderLeftColor = 'var(--primary)'; }
                                         return (
@@ -749,10 +847,16 @@ export default function Calendar() {
                                     const duration = Math.max(15, endMins - startMins);
 
                                     let bgColor, borderLeftColor, textColor;
-                                    if (ev.graph_event_id) {
-                                        bgColor = '#ADD8E6';
-                                        borderLeftColor = '#0078D4';
-                                        textColor = '#004085';
+                                    if (selectedUser === 'all' && ev.user_id) {
+                                        const sc = getStaffColor(ev.user_id);
+                                        bgColor = sc;
+                                        borderLeftColor = 'rgba(0,0,0,0.15)';
+                                        textColor = '#ffffff';
+                                    } else if (ev.graph_event_id) {
+                                        const calColor = getCalendarColor(ev.graph_calendar_id);
+                                        bgColor = calColor || '#0078D4';
+                                        borderLeftColor = calColor ? 'rgba(0,0,0,0.15)' : '#005a9e';
+                                        textColor = '#ffffff';
                                     } else if (ev.eventType === 'coaching') {
                                         bgColor = 'var(--success)';
                                         borderLeftColor = 'rgba(34, 197, 94, 0.4)';
@@ -968,41 +1072,181 @@ export default function Calendar() {
                             {userCalendars.map(cal => {
                                 const isOn = enabledCalendars.has(cal.graph_calendar_id);
                                 return (
-                                    <button
-                                        key={cal.graph_calendar_id}
-                                        onClick={() => setEnabledCalendars(prev => {
-                                            const next = new Set(prev);
-                                            if (next.has(cal.graph_calendar_id)) {
-                                                next.delete(cal.graph_calendar_id);
-                                            } else {
-                                                next.add(cal.graph_calendar_id);
-                                            }
-                                            return next;
-                                        })}
-                                        style={{
-                                            display: 'flex', alignItems: 'center', gap: 6,
-                                            padding: '3px 10px', borderRadius: 'var(--radius-full)',
-                                            border: `2px solid ${isOn ? cal.color : 'var(--border)'}`,
-                                            background: isOn ? `${cal.color}22` : 'transparent',
-                                            color: isOn ? cal.color : 'var(--text-secondary)',
-                                            fontSize: 12, cursor: 'pointer',
-                                            fontWeight: isOn ? 600 : 400,
-                                            transition: 'all 0.15s'
-                                        }}
-                                    >
-                                        <span style={{
-                                            width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                                            background: isOn ? cal.color : 'var(--text-muted)'
-                                        }} />
-                                        {cal.name}
-                                        {cal.is_default && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 2 }}>work</span>}
-                                    </button>
+                                    <div key={cal.graph_calendar_id} style={{ position: 'relative' }}>
+                                        <button
+                                            onClick={() => setEnabledCalendars(prev => {
+                                                const next = new Set(prev);
+                                                if (next.has(cal.graph_calendar_id)) {
+                                                    next.delete(cal.graph_calendar_id);
+                                                } else {
+                                                    next.add(cal.graph_calendar_id);
+                                                }
+                                                return next;
+                                            })}
+                                            style={{
+                                                display: 'flex', alignItems: 'center', gap: 6,
+                                                padding: '3px 10px', borderRadius: 'var(--radius-full)',
+                                                border: `2px solid ${isOn ? cal.color : 'var(--border)'}`,
+                                                background: isOn ? `${cal.color}22` : 'transparent',
+                                                color: isOn ? cal.color : 'var(--text-secondary)',
+                                                fontSize: 12, cursor: 'pointer',
+                                                fontWeight: isOn ? 600 : 400,
+                                                transition: 'all 0.15s'
+                                            }}
+                                        >
+                                            <span
+                                                onClick={(e) => { e.stopPropagation(); setColorPickerCalId(prev => prev === cal.graph_calendar_id ? null : cal.graph_calendar_id); }}
+                                                title="Click to change colour"
+                                                style={{
+                                                    width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                                                    background: isOn ? cal.color : 'var(--text-muted)',
+                                                    cursor: 'pointer',
+                                                    border: '1px solid rgba(0,0,0,0.15)',
+                                                    transition: 'transform 0.15s'
+                                                }}
+                                                onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.4)'}
+                                                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                                            />
+                                            {cal.name}
+                                            {cal.is_default && <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 2 }}>work</span>}
+                                        </button>
+
+                                        {/* Color picker popover */}
+                                        {colorPickerCalId === cal.graph_calendar_id && (
+                                            <div ref={colorPickerRef} style={{
+                                                position: 'absolute', top: '100%', left: 0, marginTop: 6,
+                                                background: 'var(--bg-card)', border: '1px solid var(--border)',
+                                                borderRadius: 'var(--radius-md)', padding: 8,
+                                                boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
+                                                display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6,
+                                                zIndex: 100, animation: 'fadeslide 0.15s ease-out'
+                                            }}>
+                                                {STAFF_COLORS.map(c => (
+                                                    <button
+                                                        key={c}
+                                                        onClick={async (e) => {
+                                                            e.stopPropagation();
+                                                            // Update local state immediately
+                                                            setUserCalendars(prev => prev.map(uc =>
+                                                                uc.graph_calendar_id === cal.graph_calendar_id ? { ...uc, color: c } : uc
+                                                            ));
+                                                            setColorPickerCalId(null);
+                                                            // Persist to Supabase
+                                                            await supabase.from('user_calendars')
+                                                                .update({ color: c })
+                                                                .eq('user_id', user.id)
+                                                                .eq('graph_calendar_id', cal.graph_calendar_id);
+                                                        }}
+                                                        style={{
+                                                            width: 22, height: 22, borderRadius: '50%',
+                                                            background: c, border: c === cal.color ? '2px solid var(--text-primary)' : '2px solid transparent',
+                                                            cursor: 'pointer', padding: 0,
+                                                            transition: 'transform 0.1s, border-color 0.1s',
+                                                            outline: 'none'
+                                                        }}
+                                                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.2)'}
+                                                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                                                        title={c}
+                                                    />
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 );
                             })}
                         </div>
                     )}
 
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 'var(--space-md)', background: 'var(--bg-main)', minHeight: 0 }}>
+                    {/* Staff member filter chips — only shown in All Members view */}
+                    {selectedUser === 'all' && staffList.length > 0 && (
+                        <div style={{
+                            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                            padding: '8px 24px', borderBottom: '1px solid var(--border)',
+                            background: 'var(--bg-main)', flexShrink: 0
+                        }}>
+                            <Filter size={13} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
+                            <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginRight: 2 }}>Staff:</span>
+                            {staffList.map(s => {
+                                const color = getStaffColor(s.id);
+                                const isOn = enabledStaff.has(s.id);
+                                return (
+                                    <div key={s.id} style={{ position: 'relative' }}>
+                                        <button
+                                            onClick={() => setEnabledStaff(prev => {
+                                                const next = new Set(prev);
+                                                if (next.has(s.id)) {
+                                                    next.delete(s.id);
+                                                } else {
+                                                    next.add(s.id);
+                                                }
+                                                return next;
+                                            })}
+                                            style={{
+                                                display: 'flex', alignItems: 'center', gap: 6,
+                                                padding: '3px 10px', borderRadius: 'var(--radius-full)',
+                                                border: `2px solid ${isOn ? color : 'var(--border)'}`,
+                                                background: isOn ? `${color}22` : 'transparent',
+                                                color: isOn ? color : 'var(--text-secondary)',
+                                                fontSize: 12, cursor: 'pointer',
+                                                fontWeight: isOn ? 600 : 400,
+                                                transition: 'all 0.15s'
+                                            }}
+                                        >
+                                            <span
+                                                onClick={(e) => { e.stopPropagation(); setColorPickerStaffId(prev => prev === s.id ? null : s.id); }}
+                                                title="Click to change colour"
+                                                style={{
+                                                    width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                                                    background: isOn ? color : 'var(--text-muted)',
+                                                    cursor: 'pointer',
+                                                    border: '1px solid rgba(0,0,0,0.15)',
+                                                    transition: 'transform 0.15s'
+                                                }}
+                                                onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.4)'}
+                                                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                                            />
+                                            {s.firstName} {s.lastName}
+                                        </button>
+
+                                        {/* Color picker popover */}
+                                        {colorPickerStaffId === s.id && (
+                                            <div ref={colorPickerRef} style={{
+                                                position: 'absolute', top: '100%', left: 0, marginTop: 6,
+                                                background: 'var(--bg-card)', border: '1px solid var(--border)',
+                                                borderRadius: 'var(--radius-md)', padding: 8,
+                                                boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
+                                                display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6,
+                                                zIndex: 100, animation: 'fadeslide 0.15s ease-out'
+                                            }}>
+                                                {STAFF_COLORS.map(c => (
+                                                    <button
+                                                        key={c}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setStaffColorOverrides(prev => ({ ...prev, [s.id]: c }));
+                                                            setColorPickerStaffId(null);
+                                                        }}
+                                                        style={{
+                                                            width: 22, height: 22, borderRadius: '50%',
+                                                            background: c, border: c === color ? '2px solid var(--text-primary)' : '2px solid transparent',
+                                                            cursor: 'pointer', padding: 0,
+                                                            transition: 'transform 0.1s, border-color 0.1s',
+                                                            outline: 'none'
+                                                        }}
+                                                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.2)'}
+                                                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                                                        title={c}
+                                                    />
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 'var(--space-md)', background: 'var(--bg-main)', minHeight: 0, overflow: 'hidden' }}>
                         {loading ? (
                             <div style={{ padding: 'var(--space-xl)', textAlign: 'center', color: 'var(--text-muted)' }}>Loading appointments...</div>
                         ) : (

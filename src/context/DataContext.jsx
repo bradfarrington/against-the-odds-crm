@@ -79,9 +79,12 @@ const ACTIONS = {
     UPDATE_RECOVERY_RESOURCE: 'UPDATE_RECOVERY_RESOURCE',
     DELETE_RECOVERY_RESOURCE: 'DELETE_RECOVERY_RESOURCE',
     // Surveys
-    ADD_SURVEY: 'ADD_SURVEY',
     UPDATE_SURVEY: 'UPDATE_SURVEY',
     DELETE_SURVEY: 'DELETE_SURVEY',
+    // Workshop Stages
+    ADD_WORKSHOP_STAGE: 'ADD_WORKSHOP_STAGE',
+    UPDATE_WORKSHOP_STAGE: 'UPDATE_WORKSHOP_STAGE',
+    DELETE_WORKSHOP_STAGE: 'DELETE_WORKSHOP_STAGE',
 };
 
 // ─── Initial empty state ──────────────────────────────────────
@@ -104,6 +107,7 @@ const emptyState = {
     preventionResources: [],
     recoveryResources: [],
     surveys: [],
+    workshopStages: [],
 };
 
 // ─── Reducer ──────────────────────────────────────────────────
@@ -275,6 +279,11 @@ function dataReducer(state, action) {
         case ACTIONS.UPDATE_SURVEY: return crudLocal(state, 'surveys', { crud: 'UPDATE', payload: action.payload });
         case ACTIONS.DELETE_SURVEY: return crudLocal(state, 'surveys', { crud: 'DELETE', payload: action.payload });
 
+        // Workshop Stages
+        case ACTIONS.ADD_WORKSHOP_STAGE: return crudLocal(state, 'workshopStages', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_WORKSHOP_STAGE: return crudLocal(state, 'workshopStages', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_WORKSHOP_STAGE: return crudLocal(state, 'workshopStages', { crud: 'DELETE', payload: action.payload });
+
         default:
             return state;
     }
@@ -357,6 +366,10 @@ const apiMap = {
     [ACTIONS.ADD_SURVEY]: (p) => api.createSurvey(p),
     [ACTIONS.UPDATE_SURVEY]: (p) => api.modifySurvey(p.id, p),
     [ACTIONS.DELETE_SURVEY]: (p) => api.removeSurvey(p),
+
+    [ACTIONS.ADD_WORKSHOP_STAGE]: (p) => api.createWorkshopStage(p),
+    [ACTIONS.UPDATE_WORKSHOP_STAGE]: (p) => api.modifyWorkshopStage(p.id, p),
+    [ACTIONS.DELETE_WORKSHOP_STAGE]: (p) => api.removeWorkshopStage(p),
 };
 
 // ─── Provider ──────────────────────────────────────────────────
@@ -380,7 +393,7 @@ export function DataProvider({ children }) {
                 companies, contacts, recoverySeekers, campaigns, staff,
                 projects, tasks, contracts, meetingNotes, preventionSchedule,
                 invoices, targets, templates, preventionResources, recoveryResources,
-                taskCategories, surveys,
+                taskCategories, surveys, workshopStages,
             ] = await Promise.all([
                 api.fetchCompanies(),
                 api.fetchContacts(),
@@ -399,6 +412,7 @@ export function DataProvider({ children }) {
                 api.fetchRecoveryResources(),
                 api.fetchTaskCategories(),
                 api.fetchSurveys(),
+                api.fetchWorkshopStages(),
             ]);
             rawDispatch({
                 type: ACTIONS.SET_DATA,
@@ -406,7 +420,7 @@ export function DataProvider({ children }) {
                     companies, contacts, recoverySeekers, campaigns, staff,
                     projects, tasks, contracts, meetingNotes, preventionSchedule,
                     invoices, targets, templates, preventionResources, recoveryResources,
-                    taskCategories, surveys,
+                    taskCategories, surveys, workshopStages,
                 },
             });
         } catch (err) {
