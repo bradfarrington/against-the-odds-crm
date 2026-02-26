@@ -326,6 +326,24 @@ export async function reorderWorkshopStages(updates) {
     );
 }
 
+// Company Types
+export const fetchCompanyTypes = () => fetchAll('company_types', 'sort_order');
+export const createCompanyType = (d) => insertRow('company_types', d);
+export const modifyCompanyType = (id, d) => updateRow('company_types', id, d);
+export const removeCompanyType = (id) => deleteRow('company_types', id);
+
+// Company Industries
+export const fetchCompanyIndustries = () => fetchAll('company_industries', 'sort_order');
+export const createCompanyIndustry = (d) => insertRow('company_industries', d);
+export const modifyCompanyIndustry = (id, d) => updateRow('company_industries', id, d);
+export const removeCompanyIndustry = (id) => deleteRow('company_industries', id);
+
+// Company Statuses
+export const fetchCompanyStatuses = () => fetchAll('company_statuses', 'sort_order');
+export const createCompanyStatus = (d) => insertRow('company_statuses', d);
+export const modifyCompanyStatus = (id, d) => updateRow('company_statuses', id, d);
+export const removeCompanyStatus = (id) => deleteRow('company_statuses', id);
+
 // ─── Surveys ──────────────────────────────────────────────────
 
 export async function fetchSurveys(type) {

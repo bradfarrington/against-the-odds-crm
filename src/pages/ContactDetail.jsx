@@ -4,12 +4,46 @@ import { useData, ACTIONS } from '../context/DataContext';
 import {
     ArrowLeft, Users, Mail, Phone, Building2, Globe, Calendar,
     MapPin, Receipt, BookOpen, ExternalLink, Edit2, Trash2,
-    Linkedin, Twitter, Instagram, Facebook, Link
+    Linkedin, Twitter, Instagram, Facebook, Link, Star
 } from 'lucide-react';
-import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
+import StatusBadge from '../components/StatusBadge';
 import EmailTimeline from '../components/EmailTimeline';
 import AppointmentList from '../components/AppointmentList';
+
+function StarRating({ value = 0, max = 10, onChange, label = 'ATOR Rating', readOnly = false }) {
+    const [hovered, setHovered] = useState(0);
+    const display = hovered || value;
+
+    return (
+        <div>
+            {label && <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 4 }}>{label}</div>}
+            <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                {Array.from({ length: max }, (_, i) => {
+                    const starNum = i + 1;
+                    return (
+                        <Star
+                            key={i}
+                            size={readOnly ? 16 : 20}
+                            style={{
+                                cursor: readOnly ? 'default' : 'pointer',
+                                color: starNum <= display ? '#F59E0B' : 'var(--border)',
+                                fill: starNum <= display ? '#F59E0B' : 'none',
+                                transition: 'color 0.15s, fill 0.15s',
+                            }}
+                            onClick={() => !readOnly && onChange && onChange(starNum === value ? 0 : starNum)}
+                            onMouseEnter={() => !readOnly && setHovered(starNum)}
+                            onMouseLeave={() => !readOnly && setHovered(0)}
+                        />
+                    );
+                })}
+                <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {value}/{max}
+                </span>
+            </div>
+        </div>
+    );
+}
 
 const SOCIAL_LINKS = [
     { key: 'linkedinUrl', Icon: Linkedin, label: 'LinkedIn', color: '#0A66C2' },
@@ -54,7 +88,7 @@ export default function ContactDetail() {
     }
 
     const handleOpenEdit = () => {
-        setEditForm({ firstName: contact.firstName, lastName: contact.lastName, role: contact.role || '', email: contact.email || '', phone: contact.phone || '', companyId: contact.companyId || '', status: contact.status || 'Active', notes: contact.notes || '' });
+        setEditForm({ firstName: contact.firstName, lastName: contact.lastName, role: contact.role || '', email: contact.email || '', phone: contact.phone || '', companyId: contact.companyId || '', atorRating: contact.atorRating || 0, notes: contact.notes || '' });
         setShowEditModal(true);
     };
 
@@ -91,6 +125,10 @@ export default function ContactDetail() {
     const initials = `${contact.firstName[0]}${contact.lastName[0]}`;
     const hasSocialLinks = SOCIAL_LINKS.some(s => contact[s.key]);
 
+    const handleAtorChange = (rating) => {
+        dispatch({ type: ACTIONS.UPDATE_CONTACT, payload: { ...contact, atorRating: rating } });
+    };
+
     const fmtDate = (d) => d
         ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
         : '—';
@@ -121,7 +159,6 @@ export default function ContactDetail() {
                     </div>
                 </div>
                 <div className="page-header-actions">
-                    <StatusBadge status={contact.status} />
                     <button className="btn btn-secondary" onClick={handleOpenEdit}>
                         <Edit2 size={15} /> Edit
                     </button>
@@ -193,8 +230,10 @@ export default function ContactDetail() {
                                         </span>
                                     </div>
                                     <div className="info-item">
-                                        <span className="info-label">Status</span>
-                                        <span className="info-value"><StatusBadge status={contact.status} /></span>
+                                        <span className="info-label">ATOR RATING</span>
+                                        <span className="info-value">
+                                            <StarRating value={contact.atorRating || 0} max={10} onChange={handleAtorChange} label="" />
+                                        </span>
                                     </div>
                                     {contact.notes && (
                                         <div className="info-item" style={{ gridColumn: '1 / -1' }}>
@@ -508,20 +547,20 @@ export default function ContactDetail() {
                             </div>
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Company</label>
-                            <select className="form-select" value={editForm.companyId || ''} onChange={e => setEditForm(p => ({ ...p, companyId: e.target.value }))}>
+                            <label className="form-label">Company *</label>
+                            <select className="form-select" required value={editForm.companyId || ''} onChange={e => setEditForm(p => ({ ...p, companyId: e.target.value }))}>
                                 <option value="">Select company...</option>
                                 {state.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Role / Job Title</label>
-                            <input className="form-input" value={editForm.role || ''} onChange={e => setEditForm(p => ({ ...p, role: e.target.value }))} placeholder="e.g. Wellbeing Lead" />
+                            <label className="form-label">Role / Job Title *</label>
+                            <input className="form-input" required value={editForm.role || ''} onChange={e => setEditForm(p => ({ ...p, role: e.target.value }))} placeholder="e.g. Wellbeing Lead" />
                         </div>
                         <div className="form-row">
                             <div className="form-group">
-                                <label className="form-label">Email</label>
-                                <input className="form-input" type="email" value={editForm.email || ''} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} />
+                                <label className="form-label">Email *</label>
+                                <input className="form-input" type="email" required value={editForm.email || ''} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} />
                             </div>
                             <div className="form-group">
                                 <label className="form-label">Phone</label>
@@ -529,11 +568,8 @@ export default function ContactDetail() {
                             </div>
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Status</label>
-                            <select className="form-select" value={editForm.status || 'Active'} onChange={e => setEditForm(p => ({ ...p, status: e.target.value }))}>
-                                <option>Active</option>
-                                <option>Inactive</option>
-                            </select>
+                            <label className="form-label">ATOR Rating</label>
+                            <StarRating value={editForm.atorRating || 0} max={10} onChange={val => setEditForm(p => ({ ...p, atorRating: val }))} label="" />
                         </div>
                         <div className="form-group">
                             <label className="form-label">Notes</label>

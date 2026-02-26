@@ -1,11 +1,77 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData, ACTIONS } from '../context/DataContext';
-import { Building2, Plus, MapPin, Edit2, Trash2 } from 'lucide-react';
+import { Building2, Plus, MapPin, Edit2, Trash2, Upload, X } from 'lucide-react';
 import SearchBar from '../components/SearchBar';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
 import { supabase } from '../lib/supabaseClient';
+
+// ─── Drag-and-drop Logo Upload ──────────────────────────────────
+
+function LogoUpload({ preview, onFileSelect, onClear }) {
+    const inputRef = useRef(null);
+    const [dragOver, setDragOver] = useState(false);
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('image/')) onFileSelect(file);
+    };
+
+    const handleDragOver = (e) => { e.preventDefault(); setDragOver(true); };
+    const handleDragLeave = () => setDragOver(false);
+
+    const handleClick = () => inputRef.current?.click();
+    const handleInputChange = (e) => {
+        const file = e.target.files[0];
+        if (file) onFileSelect(file);
+    };
+
+    if (preview) {
+        return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
+                <img
+                    src={preview}
+                    alt="Logo preview"
+                    style={{ height: 56, maxWidth: 180, objectFit: 'contain', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', padding: '6px 10px', background: 'var(--bg-input)' }}
+                    onError={e => { e.currentTarget.style.display = 'none'; }}
+                />
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { onClear(); if (inputRef.current) inputRef.current.value = ''; }} style={{ color: 'var(--danger)' }}>
+                    <X size={14} /> Remove
+                </button>
+                <input ref={inputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleInputChange} />
+            </div>
+        );
+    }
+
+    return (
+        <>
+            <input ref={inputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleInputChange} />
+            <div
+                className="file-upload-zone"
+                onClick={handleClick}
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                style={{
+                    cursor: 'pointer',
+                    borderColor: dragOver ? 'var(--primary)' : undefined,
+                    background: dragOver ? 'var(--primary-glow)' : undefined,
+                }}
+            >
+                <label className="file-upload-label" style={{ pointerEvents: 'none' }}>
+                    <Upload style={{ width: 24, height: 24, color: 'var(--text-muted)' }} />
+                    <span>Click to upload or drag and drop</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>PNG, JPG, SVG up to 5MB</span>
+                </label>
+            </div>
+        </>
+    );
+}
+
+// ─── Companies Page ──────────────────────────────────────────────
 
 export default function Companies() {
     const { state, dispatch } = useData();
@@ -13,7 +79,7 @@ export default function Companies() {
     const [search, setSearch] = useState('');
     const [showModal, setShowModal] = useState(false);
     const [form, setForm] = useState({
-        name: '', type: 'Company', industry: '', address: '', phone: '', email: '', website: '', status: 'Active', notes: ''
+        name: '', type: '', industry: '', city: '', postcode: '', phone: '', email: '', website: '', status: '', notes: ''
     });
     const [logoFile, setLogoFile] = useState(null);
     const [logoPreview, setLogoPreview] = useState('');
@@ -23,18 +89,47 @@ export default function Companies() {
     const [editLogoFile, setEditLogoFile] = useState(null);
     const [editLogoPreview, setEditLogoPreview] = useState('');
 
+    const companyTypes = state.companyTypes || [];
+    const companyIndustries = state.companyIndustries || [];
+    const companyStatuses = state.companyStatuses || [];
+
     const filtered = state.companies.filter(c =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||
-        c.type.toLowerCase().includes(search.toLowerCase()) ||
-        c.industry.toLowerCase().includes(search.toLowerCase())
+        (c.type || '').toLowerCase().includes(search.toLowerCase()) ||
+        (c.industry || '').toLowerCase().includes(search.toLowerCase())
     );
 
     const contactCountFor = (companyId) => state.contacts.filter(c => c.companyId === companyId).length;
 
+    const handleLogoSelect = (file) => {
+        setLogoFile(file);
+        setLogoPreview(URL.createObjectURL(file));
+    };
+
+    const handleEditLogoSelect = (file) => {
+        setEditLogoFile(file);
+        setEditLogoPreview(URL.createObjectURL(file));
+    };
+
+    const uploadLogo = async (file) => {
+        const path = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+        const { error } = await supabase.storage.from('company-logos').upload(path, file);
+        if (!error) {
+            const { data } = supabase.storage.from('company-logos').getPublicUrl(path);
+            return data.publicUrl;
+        }
+        return '';
+    };
+
     const handleOpenEdit = (company, e) => {
         e.stopPropagation();
         setEditingCompany(company);
-        setEditForm({ name: company.name, type: company.type, industry: company.industry || '', address: company.address || '', phone: company.phone || '', email: company.email || '', website: company.website || '', status: company.status, notes: company.notes || '' });
+        setEditForm({
+            name: company.name, type: company.type, industry: company.industry || '',
+            city: company.city || '', postcode: company.postcode || '',
+            phone: company.phone || '', email: company.email || '', website: company.website || '',
+            status: company.status, notes: company.notes || ''
+        });
         setEditLogoFile(null);
         setEditLogoPreview(company.logoUrl || '');
     };
@@ -44,13 +139,10 @@ export default function Companies() {
         let logoUrl = editingCompany.logoUrl || '';
         if (editLogoFile) {
             setUploading(true);
-            const path = `${Date.now()}-${editLogoFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-            const { error } = await supabase.storage.from('company-logos').upload(path, editLogoFile);
-            if (!error) {
-                const { data } = supabase.storage.from('company-logos').getPublicUrl(path);
-                logoUrl = data.publicUrl;
-            }
+            logoUrl = await uploadLogo(editLogoFile);
             setUploading(false);
+        } else if (!editLogoPreview) {
+            logoUrl = '';
         }
         dispatch({ type: ACTIONS.UPDATE_COMPANY, payload: { ...editingCompany, ...editForm, logoUrl } });
         setEditingCompany(null);
@@ -63,35 +155,25 @@ export default function Companies() {
         }
     };
 
-    const handleLogoChange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            setLogoFile(file);
-            setLogoPreview(URL.createObjectURL(file));
-        }
-    };
-
     const handleSubmit = async (e) => {
         e.preventDefault();
         let logoUrl = '';
         if (logoFile) {
             setUploading(true);
-            const path = `${Date.now()}-${logoFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-            const { error } = await supabase.storage.from('company-logos').upload(path, logoFile);
-            if (!error) {
-                const { data } = supabase.storage.from('company-logos').getPublicUrl(path);
-                logoUrl = data.publicUrl;
-            }
+            logoUrl = await uploadLogo(logoFile);
             setUploading(false);
         }
         dispatch({ type: ACTIONS.ADD_COMPANY, payload: { ...form, logoUrl } });
-        setForm({ name: '', type: 'Company', industry: '', address: '', phone: '', email: '', website: '', status: 'Active', notes: '' });
+        setForm({ name: '', type: '', industry: '', city: '', postcode: '', phone: '', email: '', website: '', status: '', notes: '' });
         setLogoFile(null);
         setLogoPreview('');
         setShowModal(false);
     };
 
     const updateForm = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
+
+    // Check if add form is valid
+    const isAddFormValid = form.name && form.type && form.industry && form.status && form.city && form.postcode && form.email && (logoFile || logoPreview);
 
     return (
         <>
@@ -145,9 +227,9 @@ export default function Companies() {
                                                 )}
                                                 <div>
                                                     <div className="table-cell-main">{company.name}</div>
-                                                    {company.address && (
+                                                    {(company.city || company.postcode) && (
                                                         <div className="table-cell-secondary" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                                            <MapPin size={12} /> {company.address.split(',')[0]}
+                                                            <MapPin size={12} /> {[company.city, company.postcode].filter(Boolean).join(', ')}
                                                         </div>
                                                     )}
                                                 </div>
@@ -172,7 +254,7 @@ export default function Companies() {
                                 ))}
                                 {filtered.length === 0 && (
                                     <tr>
-                                        <td colSpan={5}>
+                                        <td colSpan={6}>
                                             <div className="empty-state">
                                                 <Building2 />
                                                 <h3>No companies found</h3>
@@ -187,6 +269,7 @@ export default function Companies() {
                 </div>
             </div>
 
+            {/* Edit Company Modal */}
             <Modal isOpen={!!editingCompany} onClose={() => setEditingCompany(null)} title="Edit Company" size="lg">
                 <form onSubmit={handleEditSubmit}>
                     <div className="modal-body">
@@ -196,35 +279,38 @@ export default function Companies() {
                                 <input className="form-input" required value={editForm.name || ''} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} />
                             </div>
                             <div className="form-group">
-                                <label className="form-label">Type</label>
-                                <select className="form-select" value={editForm.type || 'Company'} onChange={e => setEditForm(p => ({ ...p, type: e.target.value }))}>
-                                    <option>Company</option>
-                                    <option>University</option>
-                                    <option>College</option>
-                                    <option>Charity</option>
-                                    <option>Local Authority</option>
-                                    <option>NHS Trust</option>
-                                    <option>Other</option>
+                                <label className="form-label">Type *</label>
+                                <select className="form-select" required value={editForm.type || ''} onChange={e => setEditForm(p => ({ ...p, type: e.target.value }))}>
+                                    <option value="">Select type…</option>
+                                    {companyTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                                 </select>
                             </div>
                         </div>
                         <div className="form-row">
                             <div className="form-group">
-                                <label className="form-label">Industry</label>
-                                <input className="form-input" value={editForm.industry || ''} onChange={e => setEditForm(p => ({ ...p, industry: e.target.value }))} />
+                                <label className="form-label">Industry *</label>
+                                <select className="form-select" required value={editForm.industry || ''} onChange={e => setEditForm(p => ({ ...p, industry: e.target.value }))}>
+                                    <option value="">Select industry…</option>
+                                    {companyIndustries.map(i => <option key={i.id} value={i.name}>{i.name}</option>)}
+                                </select>
                             </div>
                             <div className="form-group">
-                                <label className="form-label">Status</label>
-                                <select className="form-select" value={editForm.status || 'Active'} onChange={e => setEditForm(p => ({ ...p, status: e.target.value }))}>
-                                    <option>Active</option>
-                                    <option>Partner</option>
-                                    <option>Inactive</option>
+                                <label className="form-label">Status *</label>
+                                <select className="form-select" required value={editForm.status || ''} onChange={e => setEditForm(p => ({ ...p, status: e.target.value }))}>
+                                    <option value="">Select status…</option>
+                                    {companyStatuses.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                                 </select>
                             </div>
                         </div>
-                        <div className="form-group">
-                            <label className="form-label">Address</label>
-                            <input className="form-input" value={editForm.address || ''} onChange={e => setEditForm(p => ({ ...p, address: e.target.value }))} />
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label className="form-label">City / Town *</label>
+                                <input className="form-input" required value={editForm.city || ''} onChange={e => setEditForm(p => ({ ...p, city: e.target.value }))} />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Postcode *</label>
+                                <input className="form-input" required value={editForm.postcode || ''} onChange={e => setEditForm(p => ({ ...p, postcode: e.target.value }))} />
+                            </div>
                         </div>
                         <div className="form-row">
                             <div className="form-group">
@@ -232,8 +318,8 @@ export default function Companies() {
                                 <input className="form-input" value={editForm.phone || ''} onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))} />
                             </div>
                             <div className="form-group">
-                                <label className="form-label">Email</label>
-                                <input className="form-input" type="email" value={editForm.email || ''} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} />
+                                <label className="form-label">Email *</label>
+                                <input className="form-input" type="email" required value={editForm.email || ''} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} />
                             </div>
                         </div>
                         <div className="form-group">
@@ -241,11 +327,12 @@ export default function Companies() {
                             <input className="form-input" value={editForm.website || ''} onChange={e => setEditForm(p => ({ ...p, website: e.target.value }))} placeholder="https://" />
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Company Logo</label>
-                            {editLogoPreview && (
-                                <img src={editLogoPreview} alt="Current logo" style={{ display: 'block', marginBottom: 8, height: 40, maxWidth: 160, objectFit: 'contain', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', padding: '4px 8px', background: 'var(--bg-input)' }} onError={e => { e.currentTarget.style.display = 'none'; }} />
-                            )}
-                            <input type="file" accept="image/*" className="form-input" onChange={e => { const f = e.target.files[0]; if (f) { setEditLogoFile(f); setEditLogoPreview(URL.createObjectURL(f)); } }} style={{ padding: '6px 12px' }} />
+                            <label className="form-label">Company Logo *</label>
+                            <LogoUpload
+                                preview={editLogoPreview}
+                                onFileSelect={handleEditLogoSelect}
+                                onClear={() => { setEditLogoFile(null); setEditLogoPreview(''); }}
+                            />
                         </div>
                         <div className="form-group">
                             <label className="form-label">Notes</label>
@@ -259,6 +346,7 @@ export default function Companies() {
                 </form>
             </Modal>
 
+            {/* Add Company Modal */}
             <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Add Company" size="lg">
                 <form onSubmit={handleSubmit}>
                     <div className="modal-body">
@@ -268,35 +356,38 @@ export default function Companies() {
                                 <input className="form-input" required value={form.name} onChange={e => updateForm('name', e.target.value)} placeholder="Enter company name" />
                             </div>
                             <div className="form-group">
-                                <label className="form-label">Type</label>
-                                <select className="form-select" value={form.type} onChange={e => updateForm('type', e.target.value)}>
-                                    <option>Company</option>
-                                    <option>University</option>
-                                    <option>College</option>
-                                    <option>Charity</option>
-                                    <option>Local Authority</option>
-                                    <option>NHS Trust</option>
-                                    <option>Other</option>
+                                <label className="form-label">Type *</label>
+                                <select className="form-select" required value={form.type} onChange={e => updateForm('type', e.target.value)}>
+                                    <option value="">Select type…</option>
+                                    {companyTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                                 </select>
                             </div>
                         </div>
                         <div className="form-row">
                             <div className="form-group">
-                                <label className="form-label">Industry</label>
-                                <input className="form-input" value={form.industry} onChange={e => updateForm('industry', e.target.value)} placeholder="e.g. Education" />
+                                <label className="form-label">Industry *</label>
+                                <select className="form-select" required value={form.industry} onChange={e => updateForm('industry', e.target.value)}>
+                                    <option value="">Select industry…</option>
+                                    {companyIndustries.map(i => <option key={i.id} value={i.name}>{i.name}</option>)}
+                                </select>
                             </div>
                             <div className="form-group">
-                                <label className="form-label">Status</label>
-                                <select className="form-select" value={form.status} onChange={e => updateForm('status', e.target.value)}>
-                                    <option>Active</option>
-                                    <option>Partner</option>
-                                    <option>Inactive</option>
+                                <label className="form-label">Status *</label>
+                                <select className="form-select" required value={form.status} onChange={e => updateForm('status', e.target.value)}>
+                                    <option value="">Select status…</option>
+                                    {companyStatuses.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                                 </select>
                             </div>
                         </div>
-                        <div className="form-group">
-                            <label className="form-label">Address</label>
-                            <input className="form-input" value={form.address} onChange={e => updateForm('address', e.target.value)} placeholder="Full address" />
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label className="form-label">City / Town *</label>
+                                <input className="form-input" required value={form.city} onChange={e => updateForm('city', e.target.value)} placeholder="e.g. Birmingham" />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Postcode *</label>
+                                <input className="form-input" required value={form.postcode} onChange={e => updateForm('postcode', e.target.value)} placeholder="e.g. B1 1AA" />
+                            </div>
                         </div>
                         <div className="form-row">
                             <div className="form-group">
@@ -304,8 +395,8 @@ export default function Companies() {
                                 <input className="form-input" value={form.phone} onChange={e => updateForm('phone', e.target.value)} placeholder="Phone number" />
                             </div>
                             <div className="form-group">
-                                <label className="form-label">Email</label>
-                                <input className="form-input" type="email" value={form.email} onChange={e => updateForm('email', e.target.value)} placeholder="Email address" />
+                                <label className="form-label">Email *</label>
+                                <input className="form-input" type="email" required value={form.email} onChange={e => updateForm('email', e.target.value)} placeholder="Email address" />
                             </div>
                         </div>
                         <div className="form-group">
@@ -313,21 +404,12 @@ export default function Companies() {
                             <input className="form-input" value={form.website} onChange={e => updateForm('website', e.target.value)} placeholder="https://" />
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Company Logo</label>
-                            <input
-                                type="file"
-                                accept="image/*"
-                                className="form-input"
-                                onChange={handleLogoChange}
-                                style={{ padding: '6px 12px' }}
+                            <label className="form-label">Company Logo *</label>
+                            <LogoUpload
+                                preview={logoPreview}
+                                onFileSelect={handleLogoSelect}
+                                onClear={() => { setLogoFile(null); setLogoPreview(''); }}
                             />
-                            {logoPreview && (
-                                <img
-                                    src={logoPreview}
-                                    alt="Logo preview"
-                                    style={{ marginTop: 8, height: 40, maxWidth: 160, objectFit: 'contain', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', padding: '4px 8px', background: 'var(--bg-input)' }}
-                                />
-                            )}
                         </div>
                         <div className="form-group">
                             <label className="form-label">Notes</label>
@@ -336,7 +418,7 @@ export default function Companies() {
                     </div>
                     <div className="modal-footer">
                         <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-                        <button type="submit" className="btn btn-primary" disabled={uploading}>
+                        <button type="submit" className="btn btn-primary" disabled={uploading || !isAddFormValid}>
                             {uploading ? 'Uploading…' : 'Add Company'}
                         </button>
                     </div>

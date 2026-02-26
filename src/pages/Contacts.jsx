@@ -1,10 +1,42 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData, ACTIONS } from '../context/DataContext';
-import { Users, Plus, Mail, Phone, Building2, Edit2, Trash2 } from 'lucide-react';
+import { Users, Plus, Mail, Phone, Building2, Edit2, Trash2, Star } from 'lucide-react';
 import SearchBar from '../components/SearchBar';
-import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
+
+// ─── Star Rating Component ──────────────────────────────────────
+
+function StarRating({ value = 0, max = 5, onChange, readOnly = false, size: starSize = 16 }) {
+    const [hovered, setHovered] = useState(0);
+    const display = hovered || value;
+
+    return (
+        <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            {Array.from({ length: max }, (_, i) => {
+                const n = i + 1;
+                return (
+                    <Star
+                        key={i}
+                        size={starSize}
+                        style={{
+                            cursor: readOnly ? 'default' : 'pointer',
+                            color: n <= display ? '#F59E0B' : 'var(--border)',
+                            fill: n <= display ? '#F59E0B' : 'none',
+                            transition: 'color 0.15s, fill 0.15s',
+                        }}
+                        onClick={() => !readOnly && onChange && onChange(n === value ? 0 : n)}
+                        onMouseEnter={() => !readOnly && setHovered(n)}
+                        onMouseLeave={() => !readOnly && setHovered(0)}
+                    />
+                );
+            })}
+            {value > 0 && <span style={{ marginLeft: 4, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{value}/{max}</span>}
+        </div>
+    );
+}
+
+// ─── Contacts Page ──────────────────────────────────────────────
 
 export default function Contacts() {
     const { state, dispatch } = useData();
@@ -13,7 +45,7 @@ export default function Contacts() {
     const [filterCompany, setFilterCompany] = useState('');
     const [showModal, setShowModal] = useState(false);
     const [form, setForm] = useState({
-        firstName: '', lastName: '', role: '', email: '', phone: '', companyId: '', status: 'Active', notes: ''
+        firstName: '', lastName: '', role: '', email: '', phone: '', companyId: '', atorRating: 0, notes: ''
     });
     const [editingContact, setEditingContact] = useState(null);
     const [editForm, setEditForm] = useState({});
@@ -36,7 +68,11 @@ export default function Contacts() {
     const handleOpenEdit = (contact, e) => {
         e.stopPropagation();
         setEditingContact(contact);
-        setEditForm({ firstName: contact.firstName, lastName: contact.lastName, role: contact.role || '', email: contact.email || '', phone: contact.phone || '', companyId: contact.companyId || '', status: contact.status || 'Active', notes: contact.notes || '' });
+        setEditForm({
+            firstName: contact.firstName, lastName: contact.lastName,
+            role: contact.role || '', email: contact.email || '', phone: contact.phone || '',
+            companyId: contact.companyId || '', atorRating: contact.atorRating || 0, notes: contact.notes || ''
+        });
     };
 
     const handleEditSubmit = (e) => {
@@ -55,7 +91,7 @@ export default function Contacts() {
     const handleSubmit = (e) => {
         e.preventDefault();
         dispatch({ type: ACTIONS.ADD_CONTACT, payload: form });
-        setForm({ firstName: '', lastName: '', role: '', email: '', phone: '', companyId: '', status: 'Active', notes: '' });
+        setForm({ firstName: '', lastName: '', role: '', email: '', phone: '', companyId: '', atorRating: 0, notes: '' });
         setShowModal(false);
     };
 
@@ -93,7 +129,7 @@ export default function Contacts() {
                                     <th>Role</th>
                                     <th>Email</th>
                                     <th>Phone</th>
-                                    <th>Status</th>
+                                    <th>ATOR</th>
                                     <th></th>
                                 </tr>
                             </thead>
@@ -127,7 +163,9 @@ export default function Contacts() {
                                             </div>
                                         </td>
                                         <td className="table-cell-secondary">{contact.phone}</td>
-                                        <td><StatusBadge status={contact.status} /></td>
+                                        <td>
+                                            <StarRating value={contact.atorRating || 0} max={10} readOnly size={14} />
+                                        </td>
                                         <td onClick={e => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
                                             <button className="btn btn-ghost btn-sm" onClick={e => handleOpenEdit(contact, e)} title="Edit">
                                                 <Edit2 size={14} />
@@ -140,7 +178,7 @@ export default function Contacts() {
                                 ))}
                                 {filtered.length === 0 && (
                                     <tr>
-                                        <td colSpan={6}>
+                                        <td colSpan={7}>
                                             <div className="empty-state">
                                                 <Users />
                                                 <h3>No contacts found</h3>
@@ -155,6 +193,7 @@ export default function Contacts() {
                 </div>
             </div>
 
+            {/* Edit Contact Modal */}
             <Modal isOpen={!!editingContact} onClose={() => setEditingContact(null)} title="Edit Contact">
                 <form onSubmit={handleEditSubmit}>
                     <div className="modal-body">
@@ -169,20 +208,20 @@ export default function Contacts() {
                             </div>
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Company</label>
-                            <select className="form-select" value={editForm.companyId || ''} onChange={e => setEditForm(prev => ({ ...prev, companyId: e.target.value }))}>
+                            <label className="form-label">Company *</label>
+                            <select className="form-select" required value={editForm.companyId || ''} onChange={e => setEditForm(prev => ({ ...prev, companyId: e.target.value }))}>
                                 <option value="">Select company...</option>
                                 {state.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Role</label>
-                            <input className="form-input" value={editForm.role || ''} onChange={e => setEditForm(prev => ({ ...prev, role: e.target.value }))} placeholder="e.g. Wellbeing Lead" />
+                            <label className="form-label">Role *</label>
+                            <input className="form-input" required value={editForm.role || ''} onChange={e => setEditForm(prev => ({ ...prev, role: e.target.value }))} placeholder="e.g. Wellbeing Lead" />
                         </div>
                         <div className="form-row">
                             <div className="form-group">
-                                <label className="form-label">Email</label>
-                                <input className="form-input" type="email" value={editForm.email || ''} onChange={e => setEditForm(prev => ({ ...prev, email: e.target.value }))} />
+                                <label className="form-label">Email *</label>
+                                <input className="form-input" type="email" required value={editForm.email || ''} onChange={e => setEditForm(prev => ({ ...prev, email: e.target.value }))} />
                             </div>
                             <div className="form-group">
                                 <label className="form-label">Phone</label>
@@ -190,11 +229,13 @@ export default function Contacts() {
                             </div>
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Status</label>
-                            <select className="form-select" value={editForm.status || 'Active'} onChange={e => setEditForm(prev => ({ ...prev, status: e.target.value }))}>
-                                <option>Active</option>
-                                <option>Inactive</option>
-                            </select>
+                            <label className="form-label">ATOR Rating</label>
+                            <StarRating
+                                value={editForm.atorRating || 0}
+                                max={10}
+                                onChange={val => setEditForm(prev => ({ ...prev, atorRating: val }))}
+                                size={22}
+                            />
                         </div>
                         <div className="form-group">
                             <label className="form-label">Notes</label>
@@ -208,6 +249,7 @@ export default function Contacts() {
                 </form>
             </Modal>
 
+            {/* Add Contact Modal */}
             <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Add Contact">
                 <form onSubmit={handleSubmit}>
                     <div className="modal-body">
@@ -222,8 +264,8 @@ export default function Contacts() {
                             </div>
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Company</label>
-                            <select className="form-select" value={form.companyId} onChange={e => updateForm('companyId', e.target.value)}>
+                            <label className="form-label">Company *</label>
+                            <select className="form-select" required value={form.companyId} onChange={e => updateForm('companyId', e.target.value)}>
                                 <option value="">Select company...</option>
                                 {state.companies.map(c => (
                                     <option key={c.id} value={c.id}>{c.name}</option>
@@ -231,18 +273,27 @@ export default function Contacts() {
                             </select>
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Role</label>
-                            <input className="form-input" value={form.role} onChange={e => updateForm('role', e.target.value)} placeholder="e.g. Wellbeing Lead" />
+                            <label className="form-label">Role *</label>
+                            <input className="form-input" required value={form.role} onChange={e => updateForm('role', e.target.value)} placeholder="e.g. Wellbeing Lead" />
                         </div>
                         <div className="form-row">
                             <div className="form-group">
-                                <label className="form-label">Email</label>
-                                <input className="form-input" type="email" value={form.email} onChange={e => updateForm('email', e.target.value)} />
+                                <label className="form-label">Email *</label>
+                                <input className="form-input" type="email" required value={form.email} onChange={e => updateForm('email', e.target.value)} />
                             </div>
                             <div className="form-group">
                                 <label className="form-label">Phone</label>
                                 <input className="form-input" value={form.phone} onChange={e => updateForm('phone', e.target.value)} />
                             </div>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">ATOR Rating</label>
+                            <StarRating
+                                value={form.atorRating || 0}
+                                max={10}
+                                onChange={val => updateForm('atorRating', val)}
+                                size={22}
+                            />
                         </div>
                     </div>
                     <div className="modal-footer">

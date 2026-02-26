@@ -18,7 +18,7 @@ export default function Invoices({ category }) {
     const invoices = allInvoices
         .filter(inv => {
             const q = search.toLowerCase();
-            const matchesSearch = inv.invoiceNumber.toLowerCase().includes(q) || inv.description.toLowerCase().includes(q);
+            const matchesSearch = (inv.invoiceNumber || '').toLowerCase().includes(q) || (inv.description || '').toLowerCase().includes(q);
             const matchesStatus = filterStatus === 'All' || inv.status === filterStatus;
             return matchesSearch && matchesStatus;
         })
@@ -140,7 +140,7 @@ export default function Invoices({ category }) {
             </div>
 
             {showModal && (
-                <Modal onClose={() => { setShowModal(false); setEditItem(null); }} title={editItem ? 'Edit Invoice' : 'New Invoice'}>
+                <Modal isOpen={true} onClose={() => { setShowModal(false); setEditItem(null); }} title={editItem ? 'Edit Invoice' : 'New Invoice'}>
                     <form onSubmit={handleSave}>
                         <div className="modal-body">
                             <div className="form-row">
