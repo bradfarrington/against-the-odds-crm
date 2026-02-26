@@ -165,15 +165,15 @@ export default function Settings() {
                 </div>
             </div>
             <div className="page-body">
-                <div style={{ maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
-                    {/* Company Configuration */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-lg)' }}>
+                    {/* Company Types */}
                     <div className="card">
                         <div className="card-header">
                             <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-                                <Building2 size={18} /> Company Configuration
+                                <Building2 size={18} /> Company Types
                             </h3>
                         </div>
-                        <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xl)' }}>
+                        <div className="card-body">
                             <LookupListManager
                                 title="Company Types"
                                 items={state.companyTypes || []}
@@ -182,7 +182,17 @@ export default function Settings() {
                                 deleteAction={ACTIONS.DELETE_COMPANY_TYPE}
                                 dispatch={dispatch}
                             />
-                            <div style={{ borderTop: '1px solid var(--border)' }} />
+                        </div>
+                    </div>
+
+                    {/* Industries */}
+                    <div className="card">
+                        <div className="card-header">
+                            <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                                <Building2 size={18} /> Industries
+                            </h3>
+                        </div>
+                        <div className="card-body">
                             <LookupListManager
                                 title="Industries"
                                 items={state.companyIndustries || []}
@@ -191,7 +201,17 @@ export default function Settings() {
                                 deleteAction={ACTIONS.DELETE_COMPANY_INDUSTRY}
                                 dispatch={dispatch}
                             />
-                            <div style={{ borderTop: '1px solid var(--border)' }} />
+                        </div>
+                    </div>
+
+                    {/* Company Statuses */}
+                    <div className="card">
+                        <div className="card-header">
+                            <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                                <Building2 size={18} /> Company Statuses
+                            </h3>
+                        </div>
+                        <div className="card-body">
                             <LookupListManager
                                 title="Company Statuses"
                                 items={state.companyStatuses || []}
@@ -207,11 +227,9 @@ export default function Settings() {
                     <div className="card">
                         <div className="card-header"><h3>Appearance</h3></div>
                         <div className="card-body">
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                    <div style={{ fontWeight: 500 }}>Theme</div>
-                                    <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Switch between light and dark mode</div>
-                                </div>
+                            <div>
+                                <div style={{ fontWeight: 500 }}>Theme</div>
+                                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 'var(--space-md)' }}>Switch between light and dark mode</div>
                                 <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
                                     <button
                                         className={`btn ${theme === 'light' ? 'btn-primary' : 'btn-secondary'}`}
@@ -234,30 +252,42 @@ export default function Settings() {
                     <div className="card">
                         <div className="card-header"><h3>Data Management</h3></div>
                         <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                    <div style={{ fontWeight: 500 }}>Storage</div>
-                                    <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>All data is stored locally in your browser</div>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                            <div>
+                                <div style={{ fontWeight: 500 }}>Storage</div>
+                                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Connected to Supabase</div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginTop: 'var(--space-sm)' }}>
                                     <Database style={{ width: 16, height: 16, color: 'var(--text-muted)' }} />
-                                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>localStorage</span>
+                                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>PostgreSQL</span>
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                    <div style={{ fontWeight: 500, color: 'var(--danger)' }}>Reset All Data</div>
-                                    <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Clear everything and reload default seed data</div>
-                                </div>
-                                <button className="btn btn-secondary" onClick={handleClearData}>
+                            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--space-lg)' }}>
+                                <div style={{ fontWeight: 500, color: 'var(--danger)' }}>Reset All Data</div>
+                                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 'var(--space-sm)' }}>Clear everything and reload default seed data</div>
+                                <button className="btn btn-secondary btn-sm" onClick={handleClearData}>
                                     <RotateCcw style={{ width: 16, height: 16 }} /> Reset Data
                                 </button>
                             </div>
                         </div>
                     </div>
 
-                    {/* Integrations */}
+                    {/* About */}
                     <div className="card">
+                        <div className="card-header"><h3>About</h3></div>
+                        <div className="card-body">
+                            <div style={{ display: 'flex', gap: 'var(--space-lg)', alignItems: 'center' }}>
+                                <img src="/logo.png" alt="ATO" style={{ width: 48, height: 48, borderRadius: 'var(--radius-md)', objectFit: 'contain' }} />
+                                <div>
+                                    <div style={{ fontWeight: 600, fontSize: 16 }}>Against the Odds CRM</div>
+                                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                                        A comprehensive CRM for managing awareness, prevention, and recovery coaching operations.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Connected Accounts - spans full width */}
+                    <div className="card" style={{ gridColumn: '1 / -1' }}>
                         <div className="card-header"><h3>Connected Accounts</h3></div>
                         <div className="card-body">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -298,22 +328,6 @@ export default function Settings() {
                                             <Link size={16} /> Connect Account
                                         </button>
                                     )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* About */}
-                    <div className="card">
-                        <div className="card-header"><h3>About</h3></div>
-                        <div className="card-body">
-                            <div style={{ display: 'flex', gap: 'var(--space-lg)', alignItems: 'center' }}>
-                                <img src="/logo.png" alt="ATO" style={{ width: 48, height: 48, borderRadius: 'var(--radius-md)', objectFit: 'contain' }} />
-                                <div>
-                                    <div style={{ fontWeight: 600, fontSize: 16 }}>Against the Odds CRM</div>
-                                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                                        A comprehensive CRM for managing awareness, prevention, and recovery coaching operations.
-                                    </div>
                                 </div>
                             </div>
                         </div>
