@@ -66,23 +66,37 @@ function AdminDashboard({ state, user, navigate }) {
     const openTasks = tasks.filter(t => t.status !== 'Done').length;
     const urgentTasks = tasks.filter(t => t.priority === 'Urgent' && t.status !== 'Done').length;
 
-    // Chart data
-    const workshopChartData = [
-        { month: 'Oct', completed: 2, scheduled: 1 },
-        { month: 'Nov', completed: 3, scheduled: 2 },
-        { month: 'Dec', completed: 1, scheduled: 0 },
-        { month: 'Jan', completed: 4, scheduled: 3 },
-        { month: 'Feb', completed: completedWorkshops, scheduled: scheduledWorkshops },
-    ];
+    // Chart data — derived from actual DB records
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const buildMonthRange = () => {
+        const now = new Date();
+        const months = [];
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            months.push({ year: d.getFullYear(), month: d.getMonth(), label: monthNames[d.getMonth()] });
+        }
+        return months;
+    };
+    const monthRange = buildMonthRange();
 
-    const recoveryChartData = [
-        { month: 'Sep', seekers: 2 },
-        { month: 'Oct', seekers: 3 },
-        { month: 'Nov', seekers: 5 },
-        { month: 'Dec', seekers: 4 },
-        { month: 'Jan', seekers: 8 },
-        { month: 'Feb', seekers: activeSeekers + completedRecovery },
-    ];
+    const workshopChartData = monthRange.map(({ year, month, label }) => {
+        const inMonth = workshops.filter(w => {
+            const d = new Date(w.date);
+            return d.getFullYear() === year && d.getMonth() === month;
+        });
+        return {
+            month: label,
+            completed: inMonth.filter(w => w.status === 'Completed').length,
+            scheduled: inMonth.filter(w => w.status === 'Scheduled').length,
+        };
+    });
+
+    const recoveryChartData = monthRange.map(({ year, month, label }) => {
+        // Count seekers that existed by end of this month (created on or before last day of month)
+        const endOfMonth = new Date(year, month + 1, 0);
+        const count = seekers.filter(s => new Date(s.created_at || s.createdAt) <= endOfMonth).length;
+        return { month: label, seekers: count };
+    });
 
     return (
         <>
