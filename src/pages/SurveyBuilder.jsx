@@ -8,8 +8,234 @@ import {
     MessageSquare, AlignLeft, Mail, Phone, List, CheckSquare,
     ChevronDown, SlidersHorizontal, Upload, Calendar, Minus,
     FilePlus, Check, X, MousePointerClick, Save, Settings, Columns, Rows, Palette,
-    Smartphone, Monitor,
+    Smartphone, Monitor, User, Pipette,
 } from 'lucide-react';
+
+// ─── HSV ↔ Hex helpers ────────────────────────────────────────
+
+function hsvToHex(h, s, v) {
+    const f = (n) => {
+        const k = (n + h / 60) % 6;
+        const c = v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
+        return Math.round(c * 255).toString(16).padStart(2, '0');
+    };
+    return `#${f(5)}${f(3)}${f(1)}`;
+}
+
+function hexToHsv(hex) {
+    hex = hex.replace('#', '');
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    const r = parseInt(hex.substring(0, 2), 16) / 255;
+    const g = parseInt(hex.substring(2, 4), 16) / 255;
+    const b = parseInt(hex.substring(4, 6), 16) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const d = max - min;
+    let h = 0;
+    if (d !== 0) {
+        if (max === r) h = ((g - b) / d + 6) % 6;
+        else if (max === g) h = (b - r) / d + 2;
+        else h = (r - g) / d + 4;
+        h *= 60;
+    }
+    const s = max === 0 ? 0 : d / max;
+    return { h, s, v: max };
+}
+
+// ─── Custom Color Picker ──────────────────────────────────────
+
+function SurveyColorPicker({ value, onChange, onReset, defaultColor, label }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const display = value || defaultColor || '#1a1a2e';
+    const popupRef = useRef(null);
+
+    // HSV state derived from the current hex value
+    const initial = hexToHsv(display);
+    const [hue, setHue] = useState(initial.h);
+    const [sat, setSat] = useState(initial.s);
+    const [val, setVal] = useState(initial.v);
+
+    // Sync HSV when display value changes externally
+    useEffect(() => {
+        const hsv = hexToHsv(display);
+        setHue(hsv.h);
+        setSat(hsv.s);
+        setVal(hsv.v);
+    }, [display]);
+
+    // Click outside to close
+    useEffect(() => {
+        function handler(e) {
+            if (popupRef.current && !popupRef.current.contains(e.target)) setIsOpen(false);
+        }
+        if (isOpen) document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [isOpen]);
+
+    function commitColor(h, s, v) {
+        onChange(hsvToHex(h, s, v));
+    }
+
+    return (
+        <div className="form-group" style={{ position: 'relative' }}>
+            <label className="form-label">{label}</label>
+            <div className="sb-colour-row">
+                <div
+                    className="sb-colour-swatch"
+                    style={{ background: display, cursor: 'pointer', border: '2px solid var(--border)' }}
+                    onClick={() => setIsOpen(o => !o)}
+                />
+                <input
+                    className="form-input"
+                    value={value || ''}
+                    onChange={e => {
+                        const v = e.target.value;
+                        onChange(v);
+                        if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+                            const hsv = hexToHsv(v);
+                            setHue(hsv.h); setSat(hsv.s); setVal(hsv.v);
+                        }
+                    }}
+                    placeholder="Default"
+                    style={{ fontSize: 13, fontFamily: 'monospace', flex: 1 }}
+                />
+                {value && (
+                    <button className="btn btn-ghost btn-sm btn-icon" onClick={onReset} title="Reset">
+                        <X size={12} />
+                    </button>
+                )}
+            </div>
+
+            {isOpen && (
+                <div ref={popupRef} style={{
+                    position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 999,
+                    background: 'var(--bg-card)', border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)',
+                    padding: 14, width: 260,
+                }}>
+                    {/* Saturation / Value canvas */}
+                    <SatValCanvas hue={hue} sat={sat} val={val} onDrag={(s, v) => { setSat(s); setVal(v); commitColor(hue, s, v); }} />
+
+                    {/* Hue slider */}
+                    <HueSlider hue={hue} onDrag={h => { setHue(h); commitColor(h, sat, val); }} />
+
+                    {/* Preview + hex display */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                        <div style={{
+                            width: 32, height: 32, borderRadius: 'var(--radius-sm)', flexShrink: 0,
+                            background: hsvToHex(hue, sat, val), border: '1px solid var(--border)',
+                        }} />
+                        <input
+                            className="form-input"
+                            value={hsvToHex(hue, sat, val)}
+                            onChange={e => {
+                                const v = e.target.value;
+                                if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+                                    const hsv = hexToHsv(v);
+                                    setHue(hsv.h); setSat(hsv.s); setVal(hsv.v);
+                                    onChange(v);
+                                }
+                            }}
+                            style={{ fontSize: 12, fontFamily: 'monospace', flex: 1 }}
+                        />
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// Saturation/Value gradient canvas
+function SatValCanvas({ hue, sat, val, onDrag }) {
+    const canvasRef = useRef(null);
+    const size = 232;
+
+    useEffect(() => {
+        const ctx = canvasRef.current?.getContext('2d');
+        if (!ctx) return;
+        // Hue base color
+        const hueColor = hsvToHex(hue, 1, 1);
+        // White → hue (horizontal)
+        const gradH = ctx.createLinearGradient(0, 0, size, 0);
+        gradH.addColorStop(0, '#ffffff');
+        gradH.addColorStop(1, hueColor);
+        ctx.fillStyle = gradH;
+        ctx.fillRect(0, 0, size, size);
+        // Transparent → black (vertical)
+        const gradV = ctx.createLinearGradient(0, 0, 0, size);
+        gradV.addColorStop(0, 'rgba(0,0,0,0)');
+        gradV.addColorStop(1, '#000000');
+        ctx.fillStyle = gradV;
+        ctx.fillRect(0, 0, size, size);
+    }, [hue]);
+
+    function handlePointer(e) {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const x = Math.max(0, Math.min(size, e.clientX - rect.left));
+        const y = Math.max(0, Math.min(size, e.clientY - rect.top));
+        onDrag(x / size, 1 - y / size);
+    }
+
+    function startDrag(e) {
+        handlePointer(e);
+        function onMove(ev) { handlePointer(ev); }
+        function onUp() { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); }
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+    }
+
+    const cx = sat * size;
+    const cy = (1 - val) * size;
+
+    return (
+        <div style={{ position: 'relative', width: size, height: size, borderRadius: 'var(--radius-sm)', overflow: 'hidden', cursor: 'crosshair' }}>
+            <canvas ref={canvasRef} width={size} height={size} onPointerDown={startDrag} style={{ display: 'block', width: size, height: size }} />
+            <div style={{
+                position: 'absolute', left: cx - 7, top: cy - 7, width: 14, height: 14,
+                borderRadius: '50%', border: '2px solid #fff', boxShadow: '0 0 3px rgba(0,0,0,0.5)',
+                pointerEvents: 'none',
+            }} />
+        </div>
+    );
+}
+
+// Hue rainbow slider
+function HueSlider({ hue, onDrag }) {
+    const barRef = useRef(null);
+    const width = 232;
+
+    function handlePointer(e) {
+        const rect = barRef.current.getBoundingClientRect();
+        const x = Math.max(0, Math.min(width, e.clientX - rect.left));
+        onDrag((x / width) * 360);
+    }
+
+    function startDrag(e) {
+        handlePointer(e);
+        function onMove(ev) { handlePointer(ev); }
+        function onUp() { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); }
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+    }
+
+    const cx = (hue / 360) * width;
+
+    return (
+        <div
+            ref={barRef}
+            onPointerDown={startDrag}
+            style={{
+                position: 'relative', width, height: 14, marginTop: 10, borderRadius: 7, cursor: 'pointer',
+                background: 'linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)',
+            }}
+        >
+            <div style={{
+                position: 'absolute', left: cx - 7, top: -1, width: 16, height: 16,
+                borderRadius: '50%', border: '2px solid #fff', boxShadow: '0 0 3px rgba(0,0,0,0.5)',
+                background: hsvToHex(hue, 1, 1), pointerEvents: 'none',
+            }} />
+        </div>
+    );
+}
 
 // ─── Constants ────────────────────────────────────────────────
 
@@ -50,8 +276,22 @@ const TYPE_MAP = Object.fromEntries(
 const DEFAULT_SETTINGS = {
     fontFamily: '',
     bgColor: '',
+    cardBgColor: '',
+    cardShadow: 'md',
     progressBarColor: '',
+    personalInfoFields: [],
 };
+
+const PERSONAL_INFO_FIELDS = [
+    { key: 'firstName', label: 'First Name' },
+    { key: 'lastName', label: 'Last Name' },
+    { key: 'email', label: 'Email' },
+    { key: 'phone', label: 'Phone' },
+    { key: 'address', label: 'Address' },
+    { key: 'dateOfBirth', label: 'Date of Birth' },
+    { key: 'gender', label: 'Gender' },
+    { key: 'referralSource', label: 'Referral Source' },
+];
 
 const FONT_OPTIONS = [
     { value: '', label: 'System Default' },
@@ -72,7 +312,7 @@ function defaultConfig(type) {
         case 'checkboxes':
             return { allowOther: false, layout: 'column' };
         case 'dropdown':
-            return { allowOther: false };
+            return { allowOther: false, multiSelect: false };
         case 'rating_scale':
             return { min: 1, max: 10, step: 1, minLabel: 'Not at all', maxLabel: 'Extremely', color: '#FF6100', showNumbers: true };
         case 'file_upload':
@@ -207,8 +447,9 @@ function QuestionCardPreview({ element }) {
             );
         case 'dropdown':
             return (
-                <div className="form-select" style={{ color: 'var(--text-muted)', fontSize: 13, pointerEvents: 'none', marginTop: 4 }}>
-                    {options[0] || 'Select an option…'}
+                <div className="form-select" style={{ color: 'var(--text-muted)', fontSize: 13, pointerEvents: 'none', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {config.multiSelect ? 'Select multiple…' : (options[0] || 'Select an option…')}
+                    {config.multiSelect && <span style={{ fontSize: 10, background: 'var(--primary-bg)', color: 'var(--primary)', padding: '1px 6px', borderRadius: 'var(--radius-sm)', fontWeight: 600 }}>Multi</span>}
                 </div>
             );
         case 'rating_scale':
@@ -359,6 +600,14 @@ function EditPanel({ element, onUpdate, onDelete }) {
                             <Plus size={13} />
                             Add option
                         </button>
+                        {element.type === 'dropdown' && (
+                            <div className="sb-toggle-wrap" style={{ marginTop: 'var(--space-sm)' }} onClick={() => patchConfig('multiSelect', !element.config.multiSelect)}>
+                                <span className="sb-toggle-label">Allow multiple selections</span>
+                                <div className={`sb-toggle${element.config.multiSelect ? ' on' : ''}`}>
+                                    <div className="sb-toggle-thumb" />
+                                </div>
+                            </div>
+                        )}
                         {element.type !== 'dropdown' && (
                             <>
                                 {/* Layout toggle */}
@@ -532,6 +781,102 @@ function EditPanel({ element, onUpdate, onDelete }) {
     );
 }
 
+// ─── Preview Multi-Select Dropdown ─────────────────────────────
+
+function PreviewMultiDropdown({ options, value, onChange }) {
+    const [open, setOpen] = useState(false);
+    const selected = Array.isArray(value) ? value : [];
+    const ref = useRef(null);
+
+    useEffect(() => {
+        function handleClick(e) {
+            if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+        }
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, []);
+
+    function toggle(opt) {
+        if (selected.includes(opt)) {
+            onChange(selected.filter(v => v !== opt));
+        } else {
+            onChange([...selected, opt]);
+        }
+    }
+
+    return (
+        <div ref={ref} style={{ position: 'relative' }}>
+            <button
+                type="button"
+                className="form-select"
+                onClick={() => setOpen(o => !o)}
+                style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    cursor: 'pointer', textAlign: 'left', minHeight: 38, width: '100%',
+                }}
+            >
+                {selected.length === 0 ? (
+                    <span style={{ color: 'var(--text-muted)' }}>Select…</span>
+                ) : (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, flex: 1 }}>
+                        {selected.map((s, i) => (
+                            <span key={i} style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 3,
+                                padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 500,
+                                background: 'var(--primary-glow)', color: 'var(--primary)',
+                                border: '1px solid var(--primary)',
+                            }}>
+                                {s}
+                                <span style={{ cursor: 'pointer', fontSize: 13, opacity: 0.7 }}
+                                    onClick={e => { e.stopPropagation(); toggle(s); }}>×</span>
+                            </span>
+                        ))}
+                    </div>
+                )}
+                <ChevronDown size={14} style={{ flexShrink: 0, marginLeft: 6, opacity: 0.5 }} />
+            </button>
+            {open && (
+                <div style={{
+                    position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+                    background: 'var(--bg-card)', border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)', maxHeight: 200, overflowY: 'auto',
+                    zIndex: 50, boxShadow: 'var(--shadow-lg)',
+                }}>
+                    {options.map((opt, i) => {
+                        const isSel = selected.includes(opt);
+                        return (
+                            <div
+                                key={i}
+                                onClick={() => toggle(opt)}
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: 8,
+                                    padding: '8px 12px', cursor: 'pointer', fontSize: 13,
+                                    color: isSel ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                    background: isSel ? 'var(--primary-glow)' : 'transparent',
+                                    transition: 'background 0.1s',
+                                }}
+                                onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
+                                onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = isSel ? 'var(--primary-glow)' : 'transparent'; }}
+                            >
+                                <div style={{
+                                    width: 14, height: 14, borderRadius: 3,
+                                    border: `2px solid ${isSel ? 'var(--primary)' : 'var(--border)'}`,
+                                    background: isSel ? 'var(--primary)' : 'transparent',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    flexShrink: 0,
+                                }}>
+                                    {isSel && <Check size={8} color="#fff" />}
+                                </div>
+                                {opt}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ─── PreviewQuestion ──────────────────────────────────────────
 
 function PreviewQuestion({ element, value, onChange }) {
@@ -585,7 +930,7 @@ function PreviewQuestion({ element, value, onChange }) {
                             placeholder={config.placeholder || ''}
                         />
                     )}
-                    {type === 'dropdown' && (
+                    {type === 'dropdown' && !config.multiSelect && (
                         <select
                             className="form-select"
                             value={value || ''}
@@ -594,6 +939,13 @@ function PreviewQuestion({ element, value, onChange }) {
                             <option value="">Select…</option>
                             {options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                         </select>
+                    )}
+                    {type === 'dropdown' && config.multiSelect && (
+                        <PreviewMultiDropdown
+                            options={options}
+                            value={value}
+                            onChange={onChange}
+                        />
                     )}
                     {(type === 'multiple_choice' || type === 'checkboxes') && (
                         <>
@@ -694,8 +1046,18 @@ function PreviewMode({ survey, onExit }) {
     const contentBg = settings.bgColor ? { background: settings.bgColor } : {};
     const barColor = settings.progressBarColor || 'var(--primary)';
 
+    const SHADOW_MAP = {
+        none: 'none',
+        sm: '0 1px 6px rgba(0,0,0,0.08)',
+        md: '0 4px 24px rgba(0,0,0,0.12)',
+        lg: '0 8px 40px rgba(0,0,0,0.18)',
+        xl: '0 12px 60px rgba(0,0,0,0.25)',
+    };
+    const cardBgStyle = settings.cardBgColor ? { background: settings.cardBgColor } : {};
+    const cardShadowStyle = settings.cardShadow ? { boxShadow: SHADOW_MAP[settings.cardShadow] || SHADOW_MAP.md } : {};
+
     const cardContent = (
-        <div className="sb-preview-card">
+        <div className="sb-preview-card" style={{ ...cardBgStyle, ...cardShadowStyle }}>
             {/* Progress bar — always visible for multi-page */}
             {pages.length > 1 && (
                 <div className="sb-preview-progress-track">
@@ -897,6 +1259,20 @@ export default function SurveyBuilder() {
     const currentPageData = survey.pages[activePage] || { elements: [] };
     const elements = currentPageData.elements;
     const selectedElement = elements.find(e => e.id === selectedId) || null;
+
+    // Recovery survey check
+    const isRecoverySurvey = existingSurvey?.type === 'recovery';
+    const personalInfoFields = survey.settings?.personalInfoFields || [];
+
+    function togglePersonalInfoField(key) {
+        setSurvey(s => {
+            const current = s.settings?.personalInfoFields || [];
+            const next = current.includes(key)
+                ? current.filter(k => k !== key)
+                : [...current, key];
+            return { ...s, settings: { ...s.settings, personalInfoFields: next } };
+        });
+    }
 
     // ── Survey mutations ──────────────────────────────────────
 
@@ -1174,6 +1550,36 @@ export default function SurveyBuilder() {
                             {/* Canvas scroll area */}
                             <div className="sb-canvas-scroll">
                                 <div className="sb-canvas-body" key={activePage}>
+                                    {/* Personal Information toggle block — recovery surveys only */}
+                                    {isRecoverySurvey && activePage === 0 && (
+                                        <div className="sb-personal-info-block">
+                                            <div className="sb-personal-info-header">
+                                                <User size={16} />
+                                                <span>Personal Information Fields</span>
+                                                <span className="sb-personal-info-badge">{personalInfoFields.length} selected</span>
+                                            </div>
+                                            <p className="sb-personal-info-desc">
+                                                Toggle which standard fields to include. These will map directly to the recovery seeker's personal information.
+                                            </p>
+                                            <div className="sb-personal-info-grid">
+                                                {PERSONAL_INFO_FIELDS.map(field => {
+                                                    const isOn = personalInfoFields.includes(field.key);
+                                                    return (
+                                                        <div
+                                                            key={field.key}
+                                                            className={`sb-personal-info-toggle${isOn ? ' on' : ''}`}
+                                                            onClick={() => togglePersonalInfoField(field.key)}
+                                                        >
+                                                            <div className={`sb-toggle${isOn ? ' on' : ''}`} style={{ width: 32, height: 18, flexShrink: 0 }}>
+                                                                <div className="sb-toggle-thumb" />
+                                                            </div>
+                                                            <span>{field.label}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
                                     {elements.length === 0 ? (
                                         <div
                                             className={`sb-canvas-empty${isCanvasDragOver ? ' drag-over' : ''}`}
@@ -1336,61 +1742,45 @@ export default function SurveyBuilder() {
                                     </select>
                                 </div>
 
-                                <div className="form-group">
-                                    <label className="form-label">Background colour</label>
-                                    <div className="sb-colour-row">
-                                        <input
-                                            type="color"
-                                            value={survey.settings?.bgColor || '#1a1a2e'}
-                                            onChange={e => setSurvey(s => ({ ...s, settings: { ...s.settings, bgColor: e.target.value } }))}
-                                            className="sb-colour-swatch"
-                                        />
-                                        <input
-                                            className="form-input"
-                                            value={survey.settings?.bgColor || ''}
-                                            onChange={e => setSurvey(s => ({ ...s, settings: { ...s.settings, bgColor: e.target.value } }))}
-                                            placeholder="Default"
-                                            style={{ fontSize: 13, fontFamily: 'monospace', flex: 1 }}
-                                        />
-                                        {survey.settings?.bgColor && (
-                                            <button
-                                                className="btn btn-ghost btn-sm btn-icon"
-                                                onClick={() => setSurvey(s => ({ ...s, settings: { ...s.settings, bgColor: '' } }))}
-                                                title="Reset"
-                                            >
-                                                <X size={12} />
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
+                                <SurveyColorPicker
+                                    label="Page background"
+                                    value={survey.settings?.bgColor || ''}
+                                    defaultColor="#1a1a2e"
+                                    onChange={val => setSurvey(s => ({ ...s, settings: { ...s.settings, bgColor: val } }))}
+                                    onReset={() => setSurvey(s => ({ ...s, settings: { ...s.settings, bgColor: '' } }))}
+                                />
+
+                                <SurveyColorPicker
+                                    label="Card background"
+                                    value={survey.settings?.cardBgColor || ''}
+                                    defaultColor="#1e1e30"
+                                    onChange={val => setSurvey(s => ({ ...s, settings: { ...s.settings, cardBgColor: val } }))}
+                                    onReset={() => setSurvey(s => ({ ...s, settings: { ...s.settings, cardBgColor: '' } }))}
+                                />
 
                                 <div className="form-group">
-                                    <label className="form-label">Progress bar colour</label>
-                                    <div className="sb-colour-row">
-                                        <input
-                                            type="color"
-                                            value={survey.settings?.progressBarColor || '#FF6100'}
-                                            onChange={e => setSurvey(s => ({ ...s, settings: { ...s.settings, progressBarColor: e.target.value } }))}
-                                            className="sb-colour-swatch"
-                                        />
-                                        <input
-                                            className="form-input"
-                                            value={survey.settings?.progressBarColor || ''}
-                                            onChange={e => setSurvey(s => ({ ...s, settings: { ...s.settings, progressBarColor: e.target.value } }))}
-                                            placeholder="Default (primary)"
-                                            style={{ fontSize: 13, fontFamily: 'monospace', flex: 1 }}
-                                        />
-                                        {survey.settings?.progressBarColor && (
-                                            <button
-                                                className="btn btn-ghost btn-sm btn-icon"
-                                                onClick={() => setSurvey(s => ({ ...s, settings: { ...s.settings, progressBarColor: '' } }))}
-                                                title="Reset"
-                                            >
-                                                <X size={12} />
-                                            </button>
-                                        )}
-                                    </div>
+                                    <label className="form-label">Card shadow</label>
+                                    <select
+                                        className="form-select"
+                                        value={survey.settings?.cardShadow || 'md'}
+                                        onChange={e => setSurvey(s => ({ ...s, settings: { ...s.settings, cardShadow: e.target.value } }))}
+                                        style={{ fontSize: 13 }}
+                                    >
+                                        <option value="none">None</option>
+                                        <option value="sm">Small</option>
+                                        <option value="md">Medium</option>
+                                        <option value="lg">Large</option>
+                                        <option value="xl">Extra Large</option>
+                                    </select>
                                 </div>
+
+                                <SurveyColorPicker
+                                    label="Progress bar colour"
+                                    value={survey.settings?.progressBarColor || ''}
+                                    defaultColor="#FF6100"
+                                    onChange={val => setSurvey(s => ({ ...s, settings: { ...s.settings, progressBarColor: val } }))}
+                                    onReset={() => setSurvey(s => ({ ...s, settings: { ...s.settings, progressBarColor: '' } }))}
+                                />
 
                                 <div className="sb-right-divider" />
 

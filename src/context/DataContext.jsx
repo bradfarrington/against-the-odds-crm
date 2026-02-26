@@ -85,6 +85,8 @@ const ACTIONS = {
     ADD_WORKSHOP_STAGE: 'ADD_WORKSHOP_STAGE',
     UPDATE_WORKSHOP_STAGE: 'UPDATE_WORKSHOP_STAGE',
     DELETE_WORKSHOP_STAGE: 'DELETE_WORKSHOP_STAGE',
+    // Seeker Survey Answers
+    UPDATE_SEEKER_SURVEY_ANSWERS: 'UPDATE_SEEKER_SURVEY_ANSWERS',
 };
 
 // ─── Initial empty state ──────────────────────────────────────
@@ -284,6 +286,30 @@ function dataReducer(state, action) {
         case ACTIONS.UPDATE_WORKSHOP_STAGE: return crudLocal(state, 'workshopStages', { crud: 'UPDATE', payload: action.payload });
         case ACTIONS.DELETE_WORKSHOP_STAGE: return crudLocal(state, 'workshopStages', { crud: 'DELETE', payload: action.payload });
 
+        // Seeker Survey Answers
+        case ACTIONS.UPDATE_SEEKER_SURVEY_ANSWERS: {
+            const { seekerId, surveyId, answers: answerData } = action.payload;
+            return {
+                ...state,
+                recoverySeekers: state.recoverySeekers.map(s => {
+                    if (s.id !== seekerId) return s;
+                    const existing = (s.surveyAnswers || []).find(sa => sa.surveyId === surveyId);
+                    if (existing) {
+                        return {
+                            ...s,
+                            surveyAnswers: s.surveyAnswers.map(sa =>
+                                sa.surveyId === surveyId ? { ...sa, answers: answerData, submittedAt: new Date().toISOString() } : sa
+                            ),
+                        };
+                    }
+                    return {
+                        ...s,
+                        surveyAnswers: [...(s.surveyAnswers || []), { seekerId, surveyId, answers: answerData, submittedAt: new Date().toISOString() }],
+                    };
+                }),
+            };
+        }
+
         default:
             return state;
     }
@@ -370,6 +396,8 @@ const apiMap = {
     [ACTIONS.ADD_WORKSHOP_STAGE]: (p) => api.createWorkshopStage(p),
     [ACTIONS.UPDATE_WORKSHOP_STAGE]: (p) => api.modifyWorkshopStage(p.id, p),
     [ACTIONS.DELETE_WORKSHOP_STAGE]: (p) => api.removeWorkshopStage(p),
+
+    [ACTIONS.UPDATE_SEEKER_SURVEY_ANSWERS]: (p) => api.upsertSeekerSurveyAnswers(p.seekerId, p.surveyId, p.answers),
 };
 
 // ─── Provider ──────────────────────────────────────────────────

@@ -69,23 +69,31 @@ export const createContact = (d) => insertRow('contacts', d);
 export const modifyContact = (id, d) => updateRow('contacts', id, d);
 export const removeContact = (id) => deleteRow('contacts', id);
 
-// Recovery Seekers (with nested substance_use & coaching_sessions)
+// Recovery Seekers (with nested substance_use, coaching_sessions & survey_answers)
 export async function fetchRecoverySeekers() {
     const seekers = await fetchAll('recovery_seekers');
     const substances = await fetchAll('substance_use');
     const sessions = await fetchAll('coaching_sessions');
+    let surveyAnswers = [];
+    try {
+        const res = await supabase.from('seeker_survey_answers').select('*').order('created_at', { ascending: true });
+        if (res.data) surveyAnswers = res.data.map(toCamel);
+    } catch (e) {
+        console.warn('seeker_survey_answers table might not exist yet', e);
+    }
     return seekers.map(s => ({
         ...s,
         substanceUse: substances.filter(su => su.seekerId === s.id),
         coachingSessions: sessions.filter(cs => cs.seekerId === s.id),
+        surveyAnswers: surveyAnswers.filter(sa => sa.seekerId === s.id),
     }));
 }
 export const createSeeker = (d) => {
-    const { substanceUse, coachingSessions, ...rest } = d;
+    const { substanceUse, coachingSessions, surveyAnswers, ...rest } = d;
     return insertRow('recovery_seekers', rest);
 };
 export const modifySeeker = (id, d) => {
-    const { substanceUse, coachingSessions, ...rest } = d;
+    const { substanceUse, coachingSessions, surveyAnswers, ...rest } = d;
     return updateRow('recovery_seekers', id, rest);
 };
 export const removeSeeker = async (id) => {
@@ -415,3 +423,50 @@ export async function submitPublicSurveyResponse(surveyId, answers, metadata = {
     const response = toCamel(responseRes.data);
     await submitSurveyAnswers(response.id, answers);
 }
+
+// ─── Seeker Survey Answers ────────────────────────────────────
+
+export async function fetchSeekerSurveyAnswers(seekerId) {
+    const res = await supabase
+        .from('seeker_survey_answers')
+        .select('*')
+        .eq('seeker_id', seekerId)
+        .order('created_at', { ascending: true });
+    return handleError(res).map(toCamel);
+}
+
+export async function upsertSeekerSurveyAnswers(seekerId, surveyId, answers) {
+    const res = await supabase
+        .from('seeker_survey_answers')
+        .upsert(
+            { seeker_id: seekerId, survey_id: surveyId, answers, submitted_at: new Date().toISOString() },
+            { onConflict: 'seeker_id,survey_id' }
+        )
+        .select()
+        .single();
+    return toCamel(handleError(res));
+}
+
+// Submit a recovery survey response via edge function (bypasses RLS for anon users)
+export async function submitRecoverySurveyResponse(surveyId, personalInfo, customAnswers, allAnswers, metadata = {}) {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    const res = await fetch(`${supabaseUrl}/functions/v1/submit-recovery-survey`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': supabaseAnonKey,
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+        },
+        body: JSON.stringify({ surveyId, personalInfo, customAnswers, allAnswers, metadata }),
+    });
+
+    const text = await res.text();
+    if (!res.ok) {
+        throw new Error(`Edge function error (${res.status}): ${text}`);
+    }
+    return JSON.parse(text);
+}
+
+

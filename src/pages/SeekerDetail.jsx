@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useData, ACTIONS } from '../context/DataContext';
+import * as api from '../lib/api';
 import {
     ArrowLeft, Mail, Phone, MapPin, User, Calendar,
     AlertTriangle, HeartHandshake, Plus, Pill, Star,
-    FileText, Shield,
+    FileText, Shield, ClipboardList, Download,
 } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
@@ -21,6 +22,12 @@ export default function SeekerDetail() {
     const [showSubstanceModal, setShowSubstanceModal] = useState(false);
     const [substanceForm, setSubstanceForm] = useState({ substance: '', frequency: '', duration: '', notes: '' });
     const [activeTab, setActiveTab] = useState('overview');
+
+    // Survey fill-in modal state
+    const [showSurveyModal, setShowSurveyModal] = useState(false);
+    const [activeSurveyId, setActiveSurveyId] = useState(null);
+    const [surveyFormAnswers, setSurveyFormAnswers] = useState({});
+    const [savingSurvey, setSavingSurvey] = useState(false);
 
     const seeker = state.recoverySeekers.find(s => s.id === id);
 
@@ -74,6 +81,120 @@ export default function SeekerDetail() {
         ? Math.round(seeker.coachingSessions.reduce((s, c) => s + c.progressRating, 0) / seeker.coachingSessions.length * 10)
         : 0;
 
+    // Recovery surveys for dynamic tabs
+    const recoverySurveys = (state.surveys || []).filter(s => s.type === 'recovery');
+
+    const PERSONAL_INFO_LABELS = {
+        firstName: 'First Name', lastName: 'Last Name', email: 'Email', phone: 'Phone',
+        address: 'Address', dateOfBirth: 'Date of Birth', gender: 'Gender', referralSource: 'Referral Source',
+    };
+
+    function openSurveyFillIn(surveyId) {
+        const survey = recoverySurveys.find(s => s.id === surveyId);
+        if (!survey) return;
+        // Pre-fill with existing answers if available
+        const existing = (seeker.surveyAnswers || []).find(sa => sa.surveyId === surveyId);
+        const initial = existing?.answers || {};
+        // Also pre-fill personal info from seeker data
+        const piFields = survey.settings?.personalInfoFields || [];
+        piFields.forEach(key => {
+            if (seeker[key] && !initial[`__pi_${key}`]) {
+                initial[`__pi_${key}`] = seeker[key];
+            }
+        });
+        setSurveyFormAnswers(initial);
+        setActiveSurveyId(surveyId);
+        setShowSurveyModal(true);
+    }
+
+    async function saveSurveyAnswers() {
+        if (!activeSurveyId || savingSurvey) return;
+        setSavingSurvey(true);
+        try {
+            const survey = recoverySurveys.find(s => s.id === activeSurveyId);
+            const piFields = survey?.settings?.personalInfoFields || [];
+
+            // Extract personal info and custom answers
+            const personalInfo = {};
+            const customAnswers = {};
+            for (const [key, val] of Object.entries(surveyFormAnswers)) {
+                if (key.startsWith('__pi_')) {
+                    personalInfo[key.replace('__pi_', '')] = val;
+                } else {
+                    customAnswers[key] = val;
+                }
+            }
+
+            // Update seeker personal info
+            if (Object.keys(personalInfo).length > 0) {
+                dispatch({ type: ACTIONS.UPDATE_SEEKER, payload: { id: seeker.id, ...personalInfo } });
+            }
+
+            // Save custom answers
+            await api.upsertSeekerSurveyAnswers(seeker.id, activeSurveyId, customAnswers);
+            dispatch({
+                type: ACTIONS.UPDATE_SEEKER_SURVEY_ANSWERS,
+                payload: { seekerId: seeker.id, surveyId: activeSurveyId, answers: customAnswers },
+                _skipApi: true,
+            });
+
+            setShowSurveyModal(false);
+        } catch (err) {
+            console.error('Failed to save survey answers:', err);
+        } finally {
+            setSavingSurvey(false);
+        }
+    }
+
+    function downloadPDF(surveyId) {
+        const survey = recoverySurveys.find(s => s.id === surveyId);
+        if (!survey) return;
+        const answers = (seeker.surveyAnswers || []).find(sa => sa.surveyId === surveyId)?.answers || {};
+        const piFields = survey.settings?.personalInfoFields || [];
+        const elements = (survey.pages || []).flatMap(p => p.elements || []);
+
+        // Build printable HTML
+        let html = `<html><head><title>${survey.title} - ${seeker.firstName} ${seeker.lastName}</title>`;
+        html += `<style>body{font-family:system-ui,-apple-system,sans-serif;padding:40px;color:#1a1a2e;max-width:700px;margin:0 auto}`;
+        html += `h1{font-size:22px;margin-bottom:4px}h2{font-size:16px;color:#6b7280;margin-bottom:24px;font-weight:400}`;
+        html += `.field{margin-bottom:16px}.label{font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px}`;
+        html += `.value{font-size:15px;color:#1a1a2e;padding:8px 0;border-bottom:1px solid #e5e7eb}`;
+        html += `.section{margin-top:24px;padding-top:16px;border-top:2px solid #e5e7eb}`;
+        html += `</style></head><body>`;
+        html += `<h1>${survey.title}</h1>`;
+        html += `<h2>${seeker.firstName} ${seeker.lastName} · ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</h2>`;
+
+        if (piFields.length) {
+            html += `<div class="section"><div style="font-weight:600;font-size:14px;margin-bottom:12px">Personal Information</div>`;
+            piFields.forEach(key => {
+                html += `<div class="field"><div class="label">${PERSONAL_INFO_LABELS[key] || key}</div><div class="value">${seeker[key] || '—'}</div></div>`;
+            });
+            html += `</div>`;
+        }
+
+        if (elements.length) {
+            html += `<div class="section"><div style="font-weight:600;font-size:14px;margin-bottom:12px">Survey Responses</div>`;
+            elements.forEach(el => {
+                if (el.type === 'section') {
+                    html += `<div style="font-weight:600;font-size:15px;margin-top:20px;margin-bottom:8px">${el.label || 'Section'}</div>`;
+                } else {
+                    const val = answers[el.id];
+                    const display = Array.isArray(val) ? val.join(', ') : (val || '—');
+                    html += `<div class="field"><div class="label">${el.label || 'Untitled'}</div><div class="value">${display}</div></div>`;
+                }
+            });
+            html += `</div>`;
+        }
+
+        html += `</body></html>`;
+
+        const printWin = window.open('', '_blank');
+        printWin.document.write(html);
+        printWin.document.close();
+        printWin.focus();
+        setTimeout(() => { printWin.print(); }, 300);
+    }
+
     return (
         <>
             <div className="page-header">
@@ -102,6 +223,16 @@ export default function SeekerDetail() {
                     <button className={`tab ${activeTab === 'substance' ? 'active' : ''}`} onClick={() => setActiveTab('substance')}>Substance Use</button>
                     <button className={`tab ${activeTab === 'coaching' ? 'active' : ''}`} onClick={() => setActiveTab('coaching')}>Coaching Sessions</button>
                     <button className={`tab ${activeTab === 'emails' ? 'active' : ''}`} onClick={() => setActiveTab('emails')}>Emails</button>
+                    {recoverySurveys.map(survey => (
+                        <button
+                            key={survey.id}
+                            className={`tab ${activeTab === `survey_${survey.id}` ? 'active' : ''}`}
+                            onClick={() => setActiveTab(`survey_${survey.id}`)}
+                        >
+                            <ClipboardList size={13} style={{ marginRight: 4 }} />
+                            {survey.title}
+                        </button>
+                    ))}
                 </div>
 
                 {/* Overview Tab */}
@@ -348,6 +479,96 @@ export default function SeekerDetail() {
                         <EmailTimeline contactId={seeker.id} contactEmail={seeker.email} linkedType="seeker" />
                     </div>
                 )}
+
+                {/* Dynamic Survey Tabs */}
+                {recoverySurveys.map(survey => {
+                    if (activeTab !== `survey_${survey.id}`) return null;
+                    const existingAnswers = (seeker.surveyAnswers || []).find(sa => sa.surveyId === survey.id);
+                    const hasAnswers = existingAnswers && Object.keys(existingAnswers.answers || {}).length > 0;
+                    const piFields = survey.settings?.personalInfoFields || [];
+                    const elements = (survey.pages || []).flatMap(p => p.elements || []);
+
+                    return (
+                        <div key={survey.id} className="detail-sections fade-in-up">
+                            {hasAnswers ? (
+                                <>
+                                    {/* Personal info from survey */}
+                                    {piFields.length > 0 && (
+                                        <div className="card detail-section">
+                                            <div className="card-header">
+                                                <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                                                    <User size={18} /> Personal Information
+                                                </h3>
+                                            </div>
+                                            <div className="card-body">
+                                                <div className="info-grid">
+                                                    {piFields.map(key => (
+                                                        <div className="info-item" key={key}>
+                                                            <span className="info-label">{PERSONAL_INFO_LABELS[key]}</span>
+                                                            <span className="info-value">{seeker[key] || '—'}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Custom answers */}
+                                    {elements.length > 0 && (
+                                        <div className="card detail-section">
+                                            <div className="card-header">
+                                                <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                                                    <ClipboardList size={18} /> Survey Responses
+                                                </h3>
+                                                <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                                                    <button className="btn btn-secondary btn-sm" onClick={() => openSurveyFillIn(survey.id)}>
+                                                        Edit Answers
+                                                    </button>
+                                                    <button className="btn btn-primary btn-sm" onClick={() => downloadPDF(survey.id)}>
+                                                        <Download size={14} /> Download PDF
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="card-body">
+                                                <div className="info-grid">
+                                                    {elements.filter(el => el.type !== 'section').map(el => {
+                                                        const val = existingAnswers.answers[el.id];
+                                                        const display = Array.isArray(val) ? val.join(', ') : (val || '—');
+                                                        return (
+                                                            <div className="info-item" key={el.id}>
+                                                                <span className="info-label">{el.label || 'Untitled'}</span>
+                                                                <span className="info-value">{display}</span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {existingAnswers?.submittedAt && (
+                                        <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'right', marginTop: 'var(--space-sm)' }}>
+                                            Last submitted: {new Date(existingAnswers.submittedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <div className="card">
+                                    <div className="card-body">
+                                        <div className="empty-state" style={{ padding: 'var(--space-2xl)' }}>
+                                            <ClipboardList size={40} style={{ opacity: 0.3 }} />
+                                            <h3>No responses yet</h3>
+                                            <p>Fill in this survey for {seeker.firstName} {seeker.lastName}</p>
+                                            <button className="btn btn-primary" style={{ marginTop: 'var(--space-md)' }} onClick={() => openSurveyFillIn(survey.id)}>
+                                                <Plus size={16} /> Fill In Survey
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
             </div>
 
             <CoachingSessionModal
@@ -409,6 +630,185 @@ export default function SeekerDetail() {
                     </div>
                 </form>
             </Modal>
+
+            {/* Survey Fill-In Modal */}
+            {showSurveyModal && activeSurveyId && (() => {
+                const survey = recoverySurveys.find(s => s.id === activeSurveyId);
+                if (!survey) return null;
+                const piFields = survey.settings?.personalInfoFields || [];
+                const elements = (survey.pages || []).flatMap(p => p.elements || []);
+                return (
+                    <Modal isOpen={showSurveyModal} onClose={() => setShowSurveyModal(false)} title={survey.title} size="lg">
+                        <div className="modal-body">
+                            {piFields.length > 0 && (
+                                <>
+                                    <h4 style={{ color: 'var(--text-secondary)', marginBottom: -4 }}>Personal Information</h4>
+                                    <div className="form-row" style={{ flexWrap: 'wrap' }}>
+                                        {piFields.map(key => (
+                                            <div className="form-group" key={key} style={{ flex: '1 1 45%', minWidth: 200 }}>
+                                                <label className="form-label">{PERSONAL_INFO_LABELS[key]}</label>
+                                                {key === 'gender' ? (
+                                                    <select className="form-select" value={surveyFormAnswers[`__pi_${key}`] || ''} onChange={e => setSurveyFormAnswers(prev => ({ ...prev, [`__pi_${key}`]: e.target.value }))}>
+                                                        <option value="">Select...</option>
+                                                        <option>Male</option>
+                                                        <option>Female</option>
+                                                        <option>Non-binary</option>
+                                                        <option>Prefer not to say</option>
+                                                    </select>
+                                                ) : key === 'referralSource' ? (
+                                                    <select className="form-select" value={surveyFormAnswers[`__pi_${key}`] || ''} onChange={e => setSurveyFormAnswers(prev => ({ ...prev, [`__pi_${key}`]: e.target.value }))}>
+                                                        <option value="">Select...</option>
+                                                        <option>Self-referral</option>
+                                                        <option>GP Referral</option>
+                                                        <option>GamCare</option>
+                                                        <option>Betknowmore UK</option>
+                                                        <option>Bolton Council</option>
+                                                        <option>Family/Friend</option>
+                                                        <option>Other</option>
+                                                    </select>
+                                                ) : key === 'dateOfBirth' ? (
+                                                    <input type="date" className="form-input" value={surveyFormAnswers[`__pi_${key}`] || ''} onChange={e => setSurveyFormAnswers(prev => ({ ...prev, [`__pi_${key}`]: e.target.value }))} />
+                                                ) : (
+                                                    <input className="form-input" type={key === 'email' ? 'email' : key === 'phone' ? 'tel' : 'text'} value={surveyFormAnswers[`__pi_${key}`] || ''} onChange={e => setSurveyFormAnswers(prev => ({ ...prev, [`__pi_${key}`]: e.target.value }))} />
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {elements.length > 0 && <div style={{ height: 1, background: 'var(--border)', margin: 'var(--space-md) 0' }} />}
+                                </>
+                            )}
+
+                            {elements.length > 0 && (
+                                <>
+                                    <h4 style={{ color: 'var(--text-secondary)', marginBottom: -4 }}>Survey Questions</h4>
+                                    {elements.map(el => {
+                                        if (el.type === 'section') {
+                                            return (
+                                                <div key={el.id} style={{ marginTop: 'var(--space-md)' }}>
+                                                    <h4 style={{ color: 'var(--text-primary)', marginBottom: 4 }}>{el.label || 'Section'}</h4>
+                                                    {(el.hint || el.config?.description) && (
+                                                        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{el.hint || el.config?.description}</p>
+                                                    )}
+                                                </div>
+                                            );
+                                        }
+                                        return (
+                                            <div className="form-group" key={el.id}>
+                                                <label className="form-label">
+                                                    {el.label || 'Untitled'}
+                                                    {el.required && <span style={{ color: 'var(--danger)' }}> *</span>}
+                                                </label>
+                                                {el.hint && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{el.hint}</div>}
+                                                {(el.type === 'short_text' || el.type === 'email' || el.type === 'phone') && (
+                                                    <input
+                                                        className="form-input"
+                                                        type={el.type === 'email' ? 'email' : el.type === 'phone' ? 'tel' : 'text'}
+                                                        value={surveyFormAnswers[el.id] || ''}
+                                                        onChange={e => setSurveyFormAnswers(prev => ({ ...prev, [el.id]: e.target.value }))}
+                                                        placeholder={el.config?.placeholder || ''}
+                                                    />
+                                                )}
+                                                {el.type === 'long_text' && (
+                                                    <textarea
+                                                        className="form-textarea"
+                                                        value={surveyFormAnswers[el.id] || ''}
+                                                        onChange={e => setSurveyFormAnswers(prev => ({ ...prev, [el.id]: e.target.value }))}
+                                                        placeholder={el.config?.placeholder || ''}
+                                                    />
+                                                )}
+                                                {el.type === 'dropdown' && !el.config?.multiSelect && (
+                                                    <select
+                                                        className="form-select"
+                                                        value={surveyFormAnswers[el.id] || ''}
+                                                        onChange={e => setSurveyFormAnswers(prev => ({ ...prev, [el.id]: e.target.value }))}
+                                                    >
+                                                        <option value="">Select…</option>
+                                                        {(el.options || []).map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                                                    </select>
+                                                )}
+                                                {el.type === 'dropdown' && el.config?.multiSelect && (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xs)' }}>
+                                                        {(el.options || []).map((opt, i) => {
+                                                            const current = Array.isArray(surveyFormAnswers[el.id]) ? surveyFormAnswers[el.id] : [];
+                                                            const isChecked = current.includes(opt);
+                                                            return (
+                                                                <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={isChecked}
+                                                                        onChange={() => {
+                                                                            const next = isChecked ? current.filter(v => v !== opt) : [...current, opt];
+                                                                            setSurveyFormAnswers(prev => ({ ...prev, [el.id]: next }));
+                                                                        }}
+                                                                    />
+                                                                    {opt}
+                                                                </label>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                                {(el.type === 'multiple_choice' || el.type === 'checkboxes') && (
+                                                    <div style={{ display: 'flex', flexDirection: el.config?.layout === 'row' ? 'row' : 'column', flexWrap: 'wrap', gap: 'var(--space-xs)' }}>
+                                                        {(el.options || []).map((opt, i) => {
+                                                            const current = Array.isArray(surveyFormAnswers[el.id]) ? surveyFormAnswers[el.id] : [];
+                                                            const isChecked = current.includes(opt);
+                                                            return (
+                                                                <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={isChecked}
+                                                                        onChange={() => {
+                                                                            const next = isChecked ? current.filter(v => v !== opt) : [...current, opt];
+                                                                            setSurveyFormAnswers(prev => ({ ...prev, [el.id]: next }));
+                                                                        }}
+                                                                    />
+                                                                    {opt}
+                                                                </label>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                                {el.type === 'date' && (
+                                                    <input
+                                                        type={el.config?.includeTime ? 'datetime-local' : 'date'}
+                                                        className="form-input"
+                                                        value={surveyFormAnswers[el.id] || ''}
+                                                        onChange={e => setSurveyFormAnswers(prev => ({ ...prev, [el.id]: e.target.value }))}
+                                                    />
+                                                )}
+                                                {el.type === 'rating_scale' && (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                                                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{el.config?.minLabel}</span>
+                                                        <input
+                                                            type="range"
+                                                            min={el.config?.min || 1}
+                                                            max={el.config?.max || 10}
+                                                            step={el.config?.step || 1}
+                                                            value={surveyFormAnswers[el.id] || el.config?.min || 1}
+                                                            onChange={e => setSurveyFormAnswers(prev => ({ ...prev, [el.id]: Number(e.target.value) }))}
+                                                            style={{ flex: 1 }}
+                                                        />
+                                                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{el.config?.maxLabel}</span>
+                                                        <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--primary)', minWidth: 24, textAlign: 'center' }}>
+                                                            {surveyFormAnswers[el.id] || el.config?.min || 1}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </>
+                            )}
+                        </div>
+                        <div className="modal-footer">
+                            <button type="button" className="btn btn-secondary" onClick={() => setShowSurveyModal(false)}>Cancel</button>
+                            <button type="button" className="btn btn-primary" onClick={saveSurveyAnswers} disabled={savingSurvey}>
+                                {savingSurvey ? 'Saving…' : 'Save Answers'}
+                            </button>
+                        </div>
+                    </Modal>
+                );
+            })()}
         </>
     );
 }

@@ -1189,7 +1189,7 @@ a:hover {
   text-align: center;
 }
 
-.empty-state svg {
+.empty-state>svg {
   width: 48px;
   height: 48px;
   color: var(--text-muted);
@@ -3908,6 +3908,76 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
   color: var(--text-secondary);
   margin: 0;
   max-width: 320px;
+}
+
+/* ─── Personal Information Block (recovery surveys) ───── */
+
+.sb-personal-info-block {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  border-left: 3px solid var(--primary);
+  animation: sbCardFadeIn 200ms ease;
+}
+
+.sb-personal-info-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.sb-personal-info-badge {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--primary);
+  background: var(--primary-glow);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.sb-personal-info-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0 0 var(--space-md) 0;
+}
+
+.sb-personal-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
+}
+
+.sb-personal-info-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--bg-main);
+  border: 1px solid transparent;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.sb-personal-info-toggle:hover {
+  background: var(--bg-card-hover);
+}
+
+.sb-personal-info-toggle.on {
+  background: var(--primary-glow);
+  border-color: var(--primary);
+  color: var(--text-primary);
 }
 
 /* ─── Animations ──────────────────────────────────────── */
