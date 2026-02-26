@@ -188,7 +188,7 @@ export default function Tasks() {
                     </button>
                 </div>
             </div>
-            <div className="page-body">
+            <div className={`page-body${viewMode === 'kanban' ? ' page-body-kanban' : ''}`}>
                 {viewMode === 'list' ? (
                     <div className="card">
                         <div className="data-table-wrapper">
@@ -235,7 +235,7 @@ export default function Tasks() {
                 ) : (
                     <>
                         {/* Desktop Kanban Board */}
-                        <div className="kanban-board kanban-desktop" style={{ gridTemplateColumns: `repeat(${categoryNames.length + (uncategorisedTasks.length > 0 ? 1 : 0)}, minmax(260px, 1fr))` }}>
+                        <div className="kanban-board kanban-desktop">
                             {categoryNames.map(catName => {
                                 const colTasks = sortByPriority([...tasks.filter(t => t.category === catName)]);
                                 return (

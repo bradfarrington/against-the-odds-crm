@@ -5,12 +5,15 @@ import * as api from '../lib/api';
 import {
     ArrowLeft, Mail, Phone, MapPin, User, Calendar,
     AlertTriangle, HeartHandshake, Plus, Pill, Star,
-    FileText, Shield, ClipboardList, Download,
+    FileText, Shield, ClipboardList, Download, Receipt,
 } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
+import DateTimePicker from '../components/DateTimePicker';
 import EmailTimeline from '../components/EmailTimeline';
 import CoachingSessionModal from '../components/CoachingSessionModal';
+import useTableSort from '../components/useTableSort';
+import SortableHeader from '../components/SortableHeader';
 
 export default function SeekerDetail() {
     const { id } = useParams();
@@ -28,8 +31,12 @@ export default function SeekerDetail() {
     const [activeSurveyId, setActiveSurveyId] = useState(null);
     const [surveyFormAnswers, setSurveyFormAnswers] = useState({});
     const [savingSurvey, setSavingSurvey] = useState(false);
+    const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+    const substanceSort = useTableSort();
+    const invoiceSort = useTableSort();
 
     const seeker = state.recoverySeekers.find(s => s.id === id);
+    const seekerInvoices = (state.invoices || []).filter(inv => inv.seekerId === id);
 
     if (!seeker) {
         return (
@@ -223,6 +230,10 @@ export default function SeekerDetail() {
                     <button className={`tab ${activeTab === 'substance' ? 'active' : ''}`} onClick={() => setActiveTab('substance')}>Substance Use</button>
                     <button className={`tab ${activeTab === 'coaching' ? 'active' : ''}`} onClick={() => setActiveTab('coaching')}>Coaching Sessions</button>
                     <button className={`tab ${activeTab === 'emails' ? 'active' : ''}`} onClick={() => setActiveTab('emails')}>Emails</button>
+                    <button className={`tab ${activeTab === 'invoices' ? 'active' : ''}`} onClick={() => setActiveTab('invoices')}>
+                        Invoices
+                        {seekerInvoices.length > 0 && <span className="badge badge-neutral" style={{ marginLeft: 6 }}>{seekerInvoices.length}</span>}
+                    </button>
                     {recoverySurveys.map(survey => (
                         <button
                             key={survey.id}
@@ -369,14 +380,14 @@ export default function SeekerDetail() {
                                     <table className="data-table">
                                         <thead>
                                             <tr>
-                                                <th>Substance</th>
-                                                <th>Frequency</th>
-                                                <th>Duration</th>
-                                                <th>Notes</th>
+                                                <SortableHeader label="Substance" sortKey="substance" sortConfig={substanceSort.sortConfig} onSort={substanceSort.requestSort} />
+                                                <SortableHeader label="Frequency" sortKey="frequency" sortConfig={substanceSort.sortConfig} onSort={substanceSort.requestSort} />
+                                                <SortableHeader label="Duration" sortKey="duration" sortConfig={substanceSort.sortConfig} onSort={substanceSort.requestSort} />
+                                                <SortableHeader label="Notes" sortKey="notes" sortConfig={substanceSort.sortConfig} onSort={substanceSort.requestSort} />
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {seeker.substanceUse.map((s, i) => (
+                                            {substanceSort.sortedData(seeker.substanceUse).map((s, i) => (
                                                 <tr key={i}>
                                                     <td className="table-cell-main">{s.substance}</td>
                                                     <td className="table-cell-secondary">{s.frequency}</td>
@@ -479,6 +490,143 @@ export default function SeekerDetail() {
                         <EmailTimeline contactId={seeker.id} contactEmail={seeker.email} linkedType="seeker" />
                     </div>
                 )}
+
+                {/* Invoices Tab */}
+                {activeTab === 'invoices' && (
+                    <div className="detail-sections">
+                        <div className="card">
+                            <div className="card-header">
+                                <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                                    <Receipt size={18} /> Invoices
+                                    <span className="badge badge-neutral" style={{ marginLeft: 4 }}>{seekerInvoices.length}</span>
+                                </h3>
+                                <button className="btn btn-primary btn-sm" onClick={() => setShowInvoiceModal(true)}>
+                                    <Plus size={16} /> New Invoice
+                                </button>
+                            </div>
+                            {seekerInvoices.length > 0 ? (
+                                <div className="data-table-wrapper">
+                                    <table className="data-table">
+                                        <thead>
+                                            <tr>
+                                                <SortableHeader label="Invoice #" sortKey="invoiceNumber" sortConfig={invoiceSort.sortConfig} onSort={invoiceSort.requestSort} />
+                                                <SortableHeader label="Description" sortKey="description" sortConfig={invoiceSort.sortConfig} onSort={invoiceSort.requestSort} />
+                                                <SortableHeader label="Amount" sortKey="amount" sortConfig={invoiceSort.sortConfig} onSort={invoiceSort.requestSort} />
+                                                <SortableHeader label="Status" sortKey="status" sortConfig={invoiceSort.sortConfig} onSort={invoiceSort.requestSort} />
+                                                <SortableHeader label="Issued" sortKey="dateIssued" sortConfig={invoiceSort.sortConfig} onSort={invoiceSort.requestSort} />
+                                                <SortableHeader label="Due" sortKey="dateDue" sortConfig={invoiceSort.sortConfig} onSort={invoiceSort.requestSort} />
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {invoiceSort.sortedData(seekerInvoices, {
+                                                dateIssued: inv => inv.dateIssued ? new Date(inv.dateIssued) : null,
+                                                dateDue: inv => inv.dateDue ? new Date(inv.dateDue) : null,
+                                            }).map(inv => (
+                                                <tr key={inv.id}>
+                                                    <td className="table-cell-main">{inv.invoiceNumber}</td>
+                                                    <td className="table-cell-secondary" style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        {inv.description || '—'}
+                                                    </td>
+                                                    <td className="table-cell-main">£{(inv.amount || 0).toLocaleString()}</td>
+                                                    <td><StatusBadge status={inv.status} /></td>
+                                                    <td className="table-cell-secondary">{inv.dateIssued ? new Date(inv.dateIssued).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</td>
+                                                    <td className="table-cell-secondary">{inv.dateDue ? new Date(inv.dateDue).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <div className="card-body">
+                                    <div className="empty-state" style={{ padding: 'var(--space-xl)' }}>
+                                        <Receipt />
+                                        <h3>No invoices found</h3>
+                                        <p>No invoices are linked to this recovery seeker</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                <Modal isOpen={showInvoiceModal} onClose={() => setShowInvoiceModal(false)} title="New Invoice">
+                    <form onSubmit={(e) => {
+                        e.preventDefault();
+                        const fd = new FormData(e.target);
+                        const data = Object.fromEntries(fd);
+                        data.amount = parseFloat(data.amount) || 0;
+                        if (!data.dateIssued) data.dateIssued = null;
+                        if (!data.dateDue) data.dateDue = null;
+                        if (!data.datePaid) data.datePaid = null;
+                        data.category = 'Recovery';
+                        if (!data.seekerId) data.seekerId = null;
+                        if (!data.contactId) data.contactId = null;
+                        if (!data.workshopId) data.workshopId = null;
+                        dispatch({ type: ACTIONS.ADD_INVOICE, payload: data });
+                        setShowInvoiceModal(false);
+                    }}>
+                        <div className="modal-body">
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label className="form-label">Invoice Number</label>
+                                    <input className="form-input" name="invoiceNumber" defaultValue={`ATO-2026-${String((state.invoices || []).length + 1).padStart(3, '0')}`} required />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Status</label>
+                                    <select className="form-select" name="status" defaultValue="Draft">
+                                        <option>Draft</option><option>Sent</option><option>Paid</option><option>Overdue</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label className="form-label">Organisation</label>
+                                    <select className="form-select" name="companyId" defaultValue="" required>
+                                        <option value="">Select…</option>
+                                        {state.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Amount (£)</label>
+                                    <input className="form-input" name="amount" type="number" required />
+                                </div>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Description</label>
+                                <textarea className="form-textarea" name="description" required />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Recovery Seeker</label>
+                                <select className="form-select" name="seekerId" defaultValue={id}>
+                                    <option value="">None</option>
+                                    {(state.recoverySeekers || []).map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}
+                                </select>
+                            </div>
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label className="form-label">Date Issued</label>
+                                    <DateTimePicker name="dateIssued" mode="date" value="" />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Date Due</label>
+                                    <DateTimePicker name="dateDue" mode="date" value="" />
+                                </div>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Date Paid</label>
+                                <DateTimePicker name="datePaid" mode="date" value="" />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Notes</label>
+                                <textarea className="form-textarea" name="notes" />
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button type="button" className="btn btn-secondary" onClick={() => setShowInvoiceModal(false)}>Cancel</button>
+                            <button type="submit" className="btn btn-primary">Create Invoice</button>
+                        </div>
+                    </form>
+                </Modal>
 
                 {/* Dynamic Survey Tabs */}
                 {recoverySurveys.map(survey => {

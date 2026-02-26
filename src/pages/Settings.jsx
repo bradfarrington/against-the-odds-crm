@@ -3,7 +3,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useData, ACTIONS } from '../context/DataContext';
 import { supabase } from '../lib/supabaseClient';
-import { Sun, Moon, Database, RotateCcw, Link, CheckCircle, Mail, Plus, Edit2, Trash2, X, Check, Building2 } from 'lucide-react';
+import { Sun, Moon, Database, RotateCcw, Link, CheckCircle, Mail, Plus, Edit2, Trash2, X, Check, Building2, BookOpen } from 'lucide-react';
 
 function LookupListManager({ title, items, addAction, updateAction, deleteAction, dispatch }) {
     const [newName, setNewName] = useState('');
@@ -31,7 +31,6 @@ function LookupListManager({ title, items, addAction, updateAction, deleteAction
 
     return (
         <div>
-            <div style={{ fontWeight: 500, marginBottom: 'var(--space-sm)', fontSize: 14 }}>{title}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-xs)' }}>
                 {items.map(item => (
                     <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', padding: '6px 0' }}>
@@ -71,7 +70,7 @@ function LookupListManager({ title, items, addAction, updateAction, deleteAction
                     className="form-input"
                     value={newName}
                     onChange={e => setNewName(e.target.value)}
-                    placeholder={`Add new ${title.toLowerCase().replace(/s$/, '')}…`}
+                    placeholder={`Add new ${title.toLowerCase().replace(/(ies|ses|s)$/, m => m === 'ies' ? 'y' : m === 'ses' ? 's' : '')}…`}
                     style={{ flex: 1 }}
                 />
                 <button type="submit" className="btn btn-primary btn-sm" disabled={!newName.trim()}>
@@ -223,6 +222,25 @@ export default function Settings() {
                         </div>
                     </div>
 
+                    {/* Workshop Types */}
+                    <div className="card">
+                        <div className="card-header">
+                            <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                                <BookOpen size={18} /> Workshop Types
+                            </h3>
+                        </div>
+                        <div className="card-body">
+                            <LookupListManager
+                                title="Workshop Types"
+                                items={state.workshopTypes || []}
+                                addAction={ACTIONS.ADD_WORKSHOP_TYPE}
+                                updateAction={ACTIONS.UPDATE_WORKSHOP_TYPE}
+                                deleteAction={ACTIONS.DELETE_WORKSHOP_TYPE}
+                                dispatch={dispatch}
+                            />
+                        </div>
+                    </div>
+
                     {/* Appearance */}
                     <div className="card">
                         <div className="card-header"><h3>Appearance</h3></div>
@@ -244,28 +262,6 @@ export default function Settings() {
                                         <Moon style={{ width: 16, height: 16 }} /> Dark
                                     </button>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Data Management */}
-                    <div className="card">
-                        <div className="card-header"><h3>Data Management</h3></div>
-                        <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
-                            <div>
-                                <div style={{ fontWeight: 500 }}>Storage</div>
-                                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Connected to Supabase</div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginTop: 'var(--space-sm)' }}>
-                                    <Database style={{ width: 16, height: 16, color: 'var(--text-muted)' }} />
-                                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>PostgreSQL</span>
-                                </div>
-                            </div>
-                            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--space-lg)' }}>
-                                <div style={{ fontWeight: 500, color: 'var(--danger)' }}>Reset All Data</div>
-                                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 'var(--space-sm)' }}>Clear everything and reload default seed data</div>
-                                <button className="btn btn-secondary btn-sm" onClick={handleClearData}>
-                                    <RotateCcw style={{ width: 16, height: 16 }} /> Reset Data
-                                </button>
                             </div>
                         </div>
                     </div>

@@ -4,6 +4,8 @@ import { Plus, Search, Receipt, X } from 'lucide-react';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import DateTimePicker from '../components/DateTimePicker';
+import useTableSort from '../components/useTableSort';
+import SortableHeader from '../components/SortableHeader';
 
 const statusMap = { Draft: 'neutral', Sent: 'info', Paid: 'success', Overdue: 'danger' };
 
@@ -13,6 +15,7 @@ export default function Invoices({ category }) {
     const [filterStatus, setFilterStatus] = useState('All');
     const [showModal, setShowModal] = useState(false);
     const [editItem, setEditItem] = useState(null);
+    const { sortConfig, requestSort, sortedData } = useTableSort();
 
     const allInvoices = (state.invoices || []).filter(inv => !category || inv.category === category);
 
@@ -22,8 +25,7 @@ export default function Invoices({ category }) {
             const matchesSearch = (inv.invoiceNumber || '').toLowerCase().includes(q) || (inv.description || '').toLowerCase().includes(q);
             const matchesStatus = filterStatus === 'All' || inv.status === filterStatus;
             return matchesSearch && matchesStatus;
-        })
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        });
 
     const getCompanyName = (id) => state.companies.find(c => c.id === id)?.name || '—';
 
@@ -43,6 +45,9 @@ export default function Invoices({ category }) {
         if (!data.dateDue) data.dateDue = null;
         if (!data.datePaid) data.datePaid = null;
         if (category) data.category = category;
+        if (!data.seekerId) data.seekerId = null;
+        if (!data.workshopId) data.workshopId = null;
+        if (!data.contactId) data.contactId = null;
         if (editItem) {
             dispatch({ type: ACTIONS.UPDATE_INVOICE, payload: { id: editItem.id, ...data } });
         } else {
@@ -104,19 +109,24 @@ export default function Invoices({ category }) {
                         <table className="data-table">
                             <thead>
                                 <tr>
-                                    <th>Invoice</th>
-                                    <th>Organisation</th>
-                                    <th>Description</th>
-                                    <th>Status</th>
-                                    <th>Amount</th>
-                                    <th>Issued</th>
-                                    <th>Due</th>
-                                    <th>Paid</th>
+                                    <SortableHeader label="Invoice" sortKey="invoiceNumber" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Organisation" sortKey="organisation" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Description" sortKey="description" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Status" sortKey="status" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Amount" sortKey="amount" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Issued" sortKey="dateIssued" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Due" sortKey="dateDue" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Paid" sortKey="datePaid" sortConfig={sortConfig} onSort={requestSort} />
                                     <th></th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {invoices.map(inv => (
+                                {sortedData(invoices, {
+                                    organisation: inv => getCompanyName(inv.companyId),
+                                    dateIssued: inv => inv.dateIssued ? new Date(inv.dateIssued) : null,
+                                    dateDue: inv => inv.dateDue ? new Date(inv.dateDue) : null,
+                                    datePaid: inv => inv.datePaid ? new Date(inv.datePaid) : null,
+                                }).map(inv => (
                                     <tr key={inv.id} onClick={() => { setEditItem(inv); setShowModal(true); }}>
                                         <td>
                                             <div className="table-cell-main"><Receipt style={{ width: 14, height: 14, display: 'inline', marginRight: 6, verticalAlign: -2, color: 'var(--primary)' }} />{inv.invoiceNumber}</div>
@@ -173,6 +183,33 @@ export default function Invoices({ category }) {
                                 <label className="form-label">Description</label>
                                 <textarea className="form-textarea" name="description" defaultValue={editItem?.description} required />
                             </div>
+                            {category === 'Recovery' && (
+                                <div className="form-group">
+                                    <label className="form-label">Recovery Seeker</label>
+                                    <select className="form-select" name="seekerId" defaultValue={editItem?.seekerId || ''}>
+                                        <option value="">None</option>
+                                        {(state.recoverySeekers || []).map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}
+                                    </select>
+                                </div>
+                            )}
+                            {category === 'Prevention' && (
+                                <div className="form-group">
+                                    <label className="form-label">Link to Workshop (optional)</label>
+                                    <select className="form-select" name="workshopId" defaultValue={editItem?.workshopId || ''}>
+                                        <option value="">None</option>
+                                        {(state.preventionSchedule || []).map(w => <option key={w.id} value={w.id}>{w.title}</option>)}
+                                    </select>
+                                </div>
+                            )}
+                            {category === 'Prevention' && (
+                                <div className="form-group">
+                                    <label className="form-label">Contact</label>
+                                    <select className="form-select" name="contactId" defaultValue={editItem?.contactId || ''}>
+                                        <option value="">None</option>
+                                        {(state.contacts || []).map(c => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
+                                    </select>
+                                </div>
+                            )}
                             <div className="form-row">
                                 <div className="form-group">
                                     <label className="form-label">Date Issued</label>

@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Calendar as CalendarIcon, Clock } from 'lucide-react';
 
-export default function DateTimePicker({ value, onChange, required, name, mode = 'datetime', showIcon = true, customTrigger }) {
+export default function DateTimePicker({ value, onChange, required, name, mode = 'datetime', showIcon = true, customTrigger, dropdownAlign = 'left' }) {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef(null);
+    // 'days' | 'months' | 'years'
+    const [viewMode, setViewMode] = useState('days');
 
     const [internalValue, setInternalValue] = useState(value || '');
 
@@ -69,79 +71,157 @@ export default function DateTimePicker({ value, onChange, required, name, mode =
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // Generate month grid
+    const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    // Generate calendar with days/months/years drill-down
     const renderMonthCalendar = () => {
         const year = selectedDate.getFullYear();
         const month = selectedDate.getMonth();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        const firstDayIndex = new Date(year, month, 1).getDay();
-
         const today = new Date();
 
-        const handleDayClick = (d) => {
-            const newDate = new Date(selectedDate);
-            newDate.setDate(d);
-            updateDate(newDate);
+        // Year grid for "years" view
+        const decadeStart = Math.floor(year / 12) * 12;
+        const yearGrid = Array.from({ length: 12 }, (_, i) => decadeStart + i);
+
+        // Header click cycles: days → months → years
+        const handleHeaderClick = () => {
+            if (viewMode === 'days') setViewMode('months');
+            else if (viewMode === 'months') setViewMode('years');
         };
 
-        const days = [];
-        // empty slots
-        for (let i = 0; i < firstDayIndex; i++) {
-            days.push(<div key={`empty-${i}`} style={{ padding: '6px' }} />);
-        }
-        // real days
-        for (let d = 1; d <= daysInMonth; d++) {
-            const isSelected = d === selectedDate.getDate();
-            const isToday = d === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+        // Arrow handlers depend on viewMode
+        const handlePrev = () => {
+            const nd = new Date(selectedDate);
+            if (viewMode === 'years') nd.setFullYear(decadeStart - 12);
+            else if (viewMode === 'months') nd.setFullYear(nd.getFullYear() - 1);
+            else nd.setMonth(nd.getMonth() - 1);
+            setSelectedDate(nd);
+        };
+        const handleNext = () => {
+            const nd = new Date(selectedDate);
+            if (viewMode === 'years') nd.setFullYear(decadeStart + 12);
+            else if (viewMode === 'months') nd.setFullYear(nd.getFullYear() + 1);
+            else nd.setMonth(nd.getMonth() + 1);
+            setSelectedDate(nd);
+        };
 
-            days.push(
-                <button
-                    key={d}
-                    type="button"
-                    onClick={() => handleDayClick(d)}
-                    style={{
-                        padding: '6px 0',
-                        textAlign: 'center',
-                        fontSize: '13px',
-                        fontWeight: isSelected ? '600' : '400',
-                        color: isSelected ? 'white' : 'var(--text-primary)',
-                        background: isSelected ? 'var(--primary)' : 'transparent',
-                        borderRadius: 'var(--radius-sm)',
-                        border: isToday && !isSelected ? '1px solid var(--primary-light)' : '1px solid transparent',
-                        cursor: 'pointer',
-                        transition: 'var(--transition-fast)'
-                    }}
-                    onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
-                    onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
-                >
-                    {d}
-                </button>
-            );
-        }
+        // Header text
+        let headerText;
+        if (viewMode === 'years') headerText = `${yearGrid[0]} – ${yearGrid[yearGrid.length - 1]}`;
+        else if (viewMode === 'months') headerText = String(year);
+        else headerText = selectedDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+        // Cell style helper for months/years grids
+        const cellStyle = (isActive, isHighlight) => ({
+            padding: '8px 4px', textAlign: 'center', fontSize: 13,
+            fontWeight: isActive ? 600 : 400, borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+            color: isActive ? '#fff' : 'var(--text-primary)',
+            background: isActive ? 'var(--primary)' : 'transparent',
+            border: isHighlight && !isActive ? '1px solid var(--primary-light)' : '1px solid transparent',
+            transition: 'var(--transition-fast)',
+        });
 
         return (
             <div style={{ flex: 1, borderRight: mode === 'datetime' ? '1px solid var(--border)' : 'none', paddingRight: mode === 'datetime' ? '16px' : '0' }}>
+                {/* Header with clickable drill-down */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => {
-                        const newDate = new Date(selectedDate);
-                        newDate.setMonth(newDate.getMonth() - 1);
-                        setSelectedDate(newDate); // Don't trigger onChange for just flipping months
-                    }}>←</button>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
-                        {selectedDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={handlePrev}>←</button>
+                    <button
+                        type="button"
+                        onClick={handleHeaderClick}
+                        style={{
+                            background: 'none', border: 'none', cursor: viewMode !== 'years' ? 'pointer' : 'default',
+                            fontWeight: 600, fontSize: 13, color: 'var(--primary)', padding: '4px 8px', fontFamily: 'inherit',
+                        }}
+                    >
+                        {headerText}
+                    </button>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={handleNext}>→</button>
+                </div>
+
+                {/* Days view */}
+                {viewMode === 'days' && (() => {
+                    const daysInMonth = new Date(year, month + 1, 0).getDate();
+                    const firstDayIndex = new Date(year, month, 1).getDay();
+                    const daySlots = [];
+                    for (let i = 0; i < firstDayIndex; i++) {
+                        daySlots.push(<div key={`empty-${i}`} style={{ padding: '6px' }} />);
+                    }
+                    for (let d = 1; d <= daysInMonth; d++) {
+                        const isSelected = d === selectedDate.getDate();
+                        const isToday = d === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+                        daySlots.push(
+                            <button
+                                key={d}
+                                type="button"
+                                onClick={() => {
+                                    const newDate = new Date(selectedDate);
+                                    newDate.setDate(d);
+                                    updateDate(newDate);
+                                }}
+                                style={{
+                                    padding: '6px 0', textAlign: 'center', fontSize: '13px',
+                                    fontWeight: isSelected ? '600' : '400',
+                                    color: isSelected ? 'white' : 'var(--text-primary)',
+                                    background: isSelected ? 'var(--primary)' : 'transparent',
+                                    borderRadius: 'var(--radius-sm)',
+                                    border: isToday && !isSelected ? '1px solid var(--primary-light)' : '1px solid transparent',
+                                    cursor: 'pointer', transition: 'var(--transition-fast)'
+                                }}
+                                onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
+                                onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+                            >
+                                {d}
+                            </button>
+                        );
+                    }
+                    return (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '8px' }}>
+                            {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
+                                <div key={day} style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>{day}</div>
+                            ))}
+                            {daySlots}
+                        </div>
+                    );
+                })()}
+
+                {/* Months view */}
+                {viewMode === 'months' && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                        {MONTHS.map((m, i) => {
+                            const isCurrent = i === month;
+                            const isThisMonth = today.getFullYear() === year && today.getMonth() === i;
+                            return (
+                                <button
+                                    key={m} type="button"
+                                    onClick={() => { setSelectedDate(new Date(year, i, 1)); setViewMode('days'); }}
+                                    style={cellStyle(isCurrent, isThisMonth)}
+                                    onMouseEnter={(e) => { if (!isCurrent) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
+                                    onMouseLeave={(e) => { if (!isCurrent) e.currentTarget.style.background = 'transparent'; }}
+                                >{m}</button>
+                            );
+                        })}
                     </div>
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => {
-                        const newDate = new Date(selectedDate);
-                        newDate.setMonth(newDate.getMonth() + 1);
-                        setSelectedDate(newDate); // Don't trigger onChange for just flipping months
-                    }}>→</button>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '8px' }}>
-                    {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
-                        <div key={day} style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>{day}</div>
-                    ))}
-                    {days}
-                </div>
+                )}
+
+                {/* Years view */}
+                {viewMode === 'years' && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                        {yearGrid.map(y => {
+                            const isCurrent = y === year;
+                            const isThisYear = y === today.getFullYear();
+                            return (
+                                <button
+                                    key={y} type="button"
+                                    onClick={() => { setSelectedDate(new Date(y, month, 1)); setViewMode('months'); }}
+                                    style={cellStyle(isCurrent, isThisYear)}
+                                    onMouseEnter={(e) => { if (!isCurrent) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
+                                    onMouseLeave={(e) => { if (!isCurrent) e.currentTarget.style.background = 'transparent'; }}
+                                >{y}</button>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
         );
     };
@@ -247,14 +327,14 @@ export default function DateTimePicker({ value, onChange, required, name, mode =
 
             {/* Display Button */}
             {customTrigger ? (
-                <div onClick={() => setIsOpen(!isOpen)} style={{ cursor: 'pointer' }}>
+                <div onClick={() => { setIsOpen(!isOpen); if (!isOpen) setViewMode('days'); }} style={{ cursor: 'pointer' }}>
                     {customTrigger(formattedDisplay)}
                 </div>
             ) : (
                 <button
                     type="button"
                     className="form-input"
-                    onClick={() => setIsOpen(!isOpen)}
+                    onClick={() => { setIsOpen(!isOpen); if (!isOpen) setViewMode('days'); }}
                     style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -279,7 +359,7 @@ export default function DateTimePicker({ value, onChange, required, name, mode =
                 <div style={{
                     position: 'absolute',
                     top: 'calc(100% + 8px)',
-                    left: 0,
+                    ...(dropdownAlign === 'right' ? { right: 0 } : { left: 0 }),
                     zIndex: 9999,
                     background: 'var(--bg-card)',
                     border: '1px solid var(--border)',

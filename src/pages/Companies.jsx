@@ -6,6 +6,8 @@ import SearchBar from '../components/SearchBar';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
 import { supabase } from '../lib/supabaseClient';
+import useTableSort from '../components/useTableSort';
+import SortableHeader from '../components/SortableHeader';
 
 // ─── Drag-and-drop Logo Upload ──────────────────────────────────
 
@@ -100,6 +102,7 @@ export default function Companies() {
     );
 
     const contactCountFor = (companyId) => state.contacts.filter(c => c.companyId === companyId).length;
+    const { sortConfig, requestSort, sortedData } = useTableSort();
 
     const handleLogoSelect = (file) => {
         setLogoFile(file);
@@ -196,16 +199,18 @@ export default function Companies() {
                         <table className="data-table">
                             <thead>
                                 <tr>
-                                    <th>Company</th>
-                                    <th>Type</th>
-                                    <th>Industry</th>
-                                    <th>Contacts</th>
-                                    <th>Status</th>
+                                    <SortableHeader label="Company" sortKey="name" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Type" sortKey="type" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Industry" sortKey="industry" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Contacts" sortKey="contacts" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Status" sortKey="status" sortConfig={sortConfig} onSort={requestSort} />
                                     <th></th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {filtered.map(company => (
+                                {sortedData(filtered, {
+                                    contacts: c => contactCountFor(c.id),
+                                }).map(company => (
                                     <tr key={company.id} onClick={() => navigate(`/companies/${company.id}`)}>
                                         <td>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
@@ -213,16 +218,16 @@ export default function Companies() {
                                                     <img
                                                         src={company.logoUrl}
                                                         alt={company.name}
-                                                        style={{ width: 36, height: 36, borderRadius: 'var(--radius-md)', objectFit: 'contain', border: '1px solid var(--border)', background: 'var(--bg-input)', padding: 4, flexShrink: 0 }}
+                                                        style={{ width: 52, height: 52, borderRadius: 'var(--radius-md)', objectFit: 'cover', border: '1px solid var(--border)', background: 'var(--bg-input)', padding: 4, flexShrink: 0 }}
                                                         onError={e => { e.currentTarget.style.display = 'none'; }}
                                                     />
                                                 ) : (
                                                     <div style={{
-                                                        width: 36, height: 36, borderRadius: 'var(--radius-md)',
+                                                        width: 52, height: 52, borderRadius: 'var(--radius-md)',
                                                         background: 'var(--primary-glow)', color: 'var(--primary)',
                                                         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
                                                     }}>
-                                                        <Building2 size={18} />
+                                                        <Building2 size={24} />
                                                     </div>
                                                 )}
                                                 <div>

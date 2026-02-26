@@ -7,7 +7,11 @@ import {
 } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
+import WorkshopModal from '../components/WorkshopModal';
+import DateTimePicker from '../components/DateTimePicker';
 import { supabase } from '../lib/supabaseClient';
+import useTableSort from '../components/useTableSort';
+import SortableHeader from '../components/SortableHeader';
 
 // ─── Star Rating Component ──────────────────────────────────────
 
@@ -100,6 +104,13 @@ export default function CompanyDetail() {
     const [editLogoFile, setEditLogoFile] = useState(null);
     const [editLogoPreview, setEditLogoPreview] = useState('');
     const [uploading, setUploading] = useState(false);
+    const [showWorkshopModal, setShowWorkshopModal] = useState(false);
+    const [selectedWorkshop, setSelectedWorkshop] = useState(null);
+    const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+    const meetingSort = useTableSort();
+    const invoiceSort = useTableSort();
+    const workshopSort = useTableSort();
+    const contactSort = useTableSort();
 
     const companyTypes = state.companyTypes || [];
     const companyIndustries = state.companyIndustries || [];
@@ -109,8 +120,15 @@ export default function CompanyDetail() {
     const contacts = state.contacts.filter(c => c.companyId === id);
     const contactIds = contacts.map(c => c.id);
     const meetings = state.meetingNotes.filter(m => m.contactIds?.some(cid => contactIds.includes(cid)));
-    const invoices = state.invoices.filter(i => i.companyId === id);
     const workshops = state.preventionSchedule.filter(w => w.companyId === id || contactIds.includes(w.contactId));
+    const workshopIds = new Set(workshops.map(w => w.id));
+    const invoices = state.invoices.filter(i => i.companyId === id || (i.workshopId && workshopIds.has(i.workshopId)));
+    const allWorkshopStages = state.workshopStages || [];
+
+    const getStageInfo = (status) => {
+        const stage = allWorkshopStages.find(s => s.name === status);
+        return stage ? { label: stage.label, color: stage.color } : null;
+    };
 
     const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
@@ -193,7 +211,7 @@ export default function CompanyDetail() {
                     </button>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
                         {company.logoUrl && (
-                            <img src={company.logoUrl} alt="" style={{ width: 40, height: 40, borderRadius: 'var(--radius-md)', objectFit: 'contain', border: '1px solid var(--border)', padding: 3, background: 'var(--bg-input)' }} onError={e => { e.currentTarget.style.display = 'none'; }} />
+                            <img src={company.logoUrl} alt="" style={{ width: 64, height: 64, borderRadius: 'var(--radius-md)', objectFit: 'cover', border: '1px solid var(--border)', padding: 4, background: 'var(--bg-input)' }} onError={e => { e.currentTarget.style.display = 'none'; }} />
                         )}
                         <div>
                             <h1>{company.name}</h1>
@@ -244,7 +262,7 @@ export default function CompanyDetail() {
                             <div className="card-body">
                                 {company.logoUrl && (
                                     <div style={{ marginBottom: 'var(--space-lg)' }}>
-                                        <img src={company.logoUrl} alt={`${company.name} logo`} style={{ height: 56, maxWidth: 200, objectFit: 'contain', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', padding: '6px 10px', background: 'var(--bg-input)' }} onError={e => { e.currentTarget.style.display = 'none'; }} />
+                                        <img src={company.logoUrl} alt={`${company.name} logo`} style={{ height: 120, maxWidth: 360, objectFit: 'cover', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-input)' }} onError={e => { e.currentTarget.style.display = 'none'; }} />
                                     </div>
                                 )}
                                 <div className="info-grid">
@@ -310,14 +328,16 @@ export default function CompanyDetail() {
                                     <table className="data-table">
                                         <thead>
                                             <tr>
-                                                <th>Title</th>
-                                                <th>Type</th>
-                                                <th>Date</th>
-                                                <th>Location</th>
+                                                <SortableHeader label="Title" sortKey="title" sortConfig={meetingSort.sortConfig} onSort={meetingSort.requestSort} />
+                                                <SortableHeader label="Type" sortKey="meetingType" sortConfig={meetingSort.sortConfig} onSort={meetingSort.requestSort} />
+                                                <SortableHeader label="Date" sortKey="date" sortConfig={meetingSort.sortConfig} onSort={meetingSort.requestSort} />
+                                                <SortableHeader label="Location" sortKey="location" sortConfig={meetingSort.sortConfig} onSort={meetingSort.requestSort} />
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {[...meetings].sort((a, b) => new Date(b.date) - new Date(a.date)).map(m => (
+                                            {meetingSort.sortedData(meetings, {
+                                                date: m => m.date ? new Date(m.date) : null,
+                                            }).map(m => (
                                                 <tr key={m.id} onClick={() => navigate(`/meeting-notes/${m.id}`)} style={{ cursor: 'pointer' }}>
                                                     <td className="table-cell-main">{m.title}</td>
                                                     <td><span className="badge badge-neutral">{m.meetingType}</span></td>
@@ -350,22 +370,28 @@ export default function CompanyDetail() {
                                     <Receipt size={18} /> Invoices
                                     <span className="badge badge-neutral" style={{ marginLeft: 4 }}>{invoices.length}</span>
                                 </h3>
+                                <button className="btn btn-primary btn-sm" onClick={() => setShowInvoiceModal(true)}>
+                                    <Plus size={16} /> New Invoice
+                                </button>
                             </div>
                             {invoices.length > 0 ? (
                                 <div className="data-table-wrapper">
                                     <table className="data-table">
                                         <thead>
                                             <tr>
-                                                <th>Invoice #</th>
-                                                <th>Description</th>
-                                                <th>Amount</th>
-                                                <th>Status</th>
-                                                <th>Issued</th>
-                                                <th>Due</th>
+                                                <SortableHeader label="Invoice #" sortKey="invoiceNumber" sortConfig={invoiceSort.sortConfig} onSort={invoiceSort.requestSort} />
+                                                <SortableHeader label="Description" sortKey="description" sortConfig={invoiceSort.sortConfig} onSort={invoiceSort.requestSort} />
+                                                <SortableHeader label="Amount" sortKey="amount" sortConfig={invoiceSort.sortConfig} onSort={invoiceSort.requestSort} />
+                                                <SortableHeader label="Status" sortKey="status" sortConfig={invoiceSort.sortConfig} onSort={invoiceSort.requestSort} />
+                                                <SortableHeader label="Issued" sortKey="dateIssued" sortConfig={invoiceSort.sortConfig} onSort={invoiceSort.requestSort} />
+                                                <SortableHeader label="Due" sortKey="dateDue" sortConfig={invoiceSort.sortConfig} onSort={invoiceSort.requestSort} />
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {[...invoices].sort((a, b) => new Date(b.dateIssued) - new Date(a.dateIssued)).map(inv => (
+                                            {invoiceSort.sortedData(invoices, {
+                                                dateIssued: inv => inv.dateIssued ? new Date(inv.dateIssued) : null,
+                                                dateDue: inv => inv.dateDue ? new Date(inv.dateDue) : null,
+                                            }).map(inv => (
                                                 <tr key={inv.id}>
                                                     <td className="table-cell-main">{inv.invoiceNumber}</td>
                                                     <td className="table-cell-secondary" style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inv.description || '—'}</td>
@@ -391,6 +417,91 @@ export default function CompanyDetail() {
                     </div>
                 )}
 
+                <Modal isOpen={showInvoiceModal} onClose={() => setShowInvoiceModal(false)} title="New Invoice">
+                    <form onSubmit={(e) => {
+                        e.preventDefault();
+                        const fd = new FormData(e.target);
+                        const data = Object.fromEntries(fd);
+                        data.amount = parseFloat(data.amount) || 0;
+                        if (!data.dateIssued) data.dateIssued = null;
+                        if (!data.dateDue) data.dateDue = null;
+                        if (!data.datePaid) data.datePaid = null;
+                        data.category = 'Prevention';
+                        data.companyId = id;
+                        if (!data.contactId) data.contactId = null;
+                        if (!data.workshopId) data.workshopId = null;
+                        dispatch({ type: ACTIONS.ADD_INVOICE, payload: data });
+                        setShowInvoiceModal(false);
+                    }}>
+                        <div className="modal-body">
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label className="form-label">Invoice Number</label>
+                                    <input className="form-input" name="invoiceNumber" defaultValue={`ATO-2026-${String((state.invoices || []).length + 1).padStart(3, '0')}`} required />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Status</label>
+                                    <select className="form-select" name="status" defaultValue="Draft">
+                                        <option>Draft</option><option>Sent</option><option>Paid</option><option>Overdue</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label className="form-label">Organisation</label>
+                                    <select className="form-select" name="companyId" defaultValue={id} disabled>
+                                        <option value={id}>{company?.name}</option>
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Amount (£)</label>
+                                    <input className="form-input" name="amount" type="number" required />
+                                </div>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Description</label>
+                                <textarea className="form-textarea" name="description" required />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Link to Workshop (optional)</label>
+                                <select className="form-select" name="workshopId" defaultValue="">
+                                    <option value="">None</option>
+                                    {(state.preventionSchedule || []).filter(w => w.companyId === id || contactIds.includes(w.contactId)).map(w => <option key={w.id} value={w.id}>{w.title}</option>)}
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Contact</label>
+                                <select className="form-select" name="contactId" defaultValue="">
+                                    <option value="">None</option>
+                                    {contacts.map(c => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
+                                </select>
+                            </div>
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label className="form-label">Date Issued</label>
+                                    <DateTimePicker name="dateIssued" mode="date" value="" />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Date Due</label>
+                                    <DateTimePicker name="dateDue" mode="date" value="" />
+                                </div>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Date Paid</label>
+                                <DateTimePicker name="datePaid" mode="date" value="" />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Notes</label>
+                                <textarea className="form-textarea" name="notes" />
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button type="button" className="btn btn-secondary" onClick={() => setShowInvoiceModal(false)}>Cancel</button>
+                            <button type="submit" className="btn btn-primary">Create Invoice</button>
+                        </div>
+                    </form>
+                </Modal>
+
                 {/* Workshops Tab */}
                 {activeTab === 'workshops' && (
                     <div className="detail-sections">
@@ -400,31 +511,49 @@ export default function CompanyDetail() {
                                     <BookOpen size={18} /> Workshops
                                     <span className="badge badge-neutral" style={{ marginLeft: 4 }}>{workshops.length}</span>
                                 </h3>
+                                <button className="btn btn-primary btn-sm" onClick={() => { setSelectedWorkshop(null); setShowWorkshopModal(true); }}>
+                                    <Plus size={14} /> Add Workshop
+                                </button>
                             </div>
                             {workshops.length > 0 ? (
                                 <div className="data-table-wrapper">
                                     <table className="data-table">
                                         <thead>
                                             <tr>
-                                                <th>Title</th>
-                                                <th>Type</th>
-                                                <th>Date</th>
-                                                <th>Location</th>
-                                                <th>Status</th>
-                                                <th>Attendees</th>
+                                                <SortableHeader label="Title" sortKey="title" sortConfig={workshopSort.sortConfig} onSort={workshopSort.requestSort} />
+                                                <SortableHeader label="Type" sortKey="workshopType" sortConfig={workshopSort.sortConfig} onSort={workshopSort.requestSort} />
+                                                <SortableHeader label="Date" sortKey="date" sortConfig={workshopSort.sortConfig} onSort={workshopSort.requestSort} />
+                                                <SortableHeader label="Location" sortKey="location" sortConfig={workshopSort.sortConfig} onSort={workshopSort.requestSort} />
+                                                <SortableHeader label="Stage" sortKey="status" sortConfig={workshopSort.sortConfig} onSort={workshopSort.requestSort} />
+                                                <SortableHeader label="Attendees" sortKey="attendeeCount" sortConfig={workshopSort.sortConfig} onSort={workshopSort.requestSort} />
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {[...workshops].sort((a, b) => new Date(b.date) - new Date(a.date)).map(w => (
-                                                <tr key={w.id}>
-                                                    <td className="table-cell-main">{w.title}</td>
-                                                    <td className="table-cell-secondary">{w.workshopType}</td>
-                                                    <td className="table-cell-secondary">{fmtDate(w.date)}</td>
-                                                    <td className="table-cell-secondary">{w.location || '—'}</td>
-                                                    <td><StatusBadge status={w.status} /></td>
-                                                    <td className="table-cell-secondary">{w.attendeeCount ?? '—'}{w.maxCapacity ? ` / ${w.maxCapacity}` : ''}</td>
-                                                </tr>
-                                            ))}
+                                            {workshopSort.sortedData(workshops, {
+                                                date: w => w.date ? new Date(w.date) : null,
+                                                attendeeCount: w => w.attendeeCount ?? 0,
+                                            }).map(w => {
+                                                const stageInfo = getStageInfo(w.status);
+                                                return (
+                                                    <tr key={w.id} onClick={() => navigate(`/workshops/${w.id}`)} style={{ cursor: 'pointer' }}>
+                                                        <td className="table-cell-main">{w.title}</td>
+                                                        <td className="table-cell-secondary">{w.workshopType}</td>
+                                                        <td className="table-cell-secondary">{fmtDate(w.date)}</td>
+                                                        <td className="table-cell-secondary">{w.location || '—'}</td>
+                                                        <td>
+                                                            {stageInfo ? (
+                                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500 }}>
+                                                                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: stageInfo.color, flexShrink: 0 }} />
+                                                                    {stageInfo.label}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="badge badge-neutral">{w.status || '—'}</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="table-cell-secondary">{w.attendeeCount ?? '—'}{w.maxCapacity ? ` / ${w.maxCapacity}` : ''}</td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
@@ -459,23 +588,31 @@ export default function CompanyDetail() {
                                     <table className="data-table">
                                         <thead>
                                             <tr>
-                                                <th>Name</th>
-                                                <th>Role</th>
-                                                <th>Email</th>
-                                                <th>Phone</th>
-                                                <th>ATOR</th>
+                                                <SortableHeader label="Name" sortKey="name" sortConfig={contactSort.sortConfig} onSort={contactSort.requestSort} />
+                                                <SortableHeader label="Role" sortKey="role" sortConfig={contactSort.sortConfig} onSort={contactSort.requestSort} />
+                                                <SortableHeader label="Email" sortKey="email" sortConfig={contactSort.sortConfig} onSort={contactSort.requestSort} />
+                                                <SortableHeader label="Phone" sortKey="phone" sortConfig={contactSort.sortConfig} onSort={contactSort.requestSort} />
+                                                <SortableHeader label="ATOR" sortKey="atorRating" sortConfig={contactSort.sortConfig} onSort={contactSort.requestSort} />
                                                 <th></th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {contacts.map(contact => (
+                                            {contactSort.sortedData(contacts, {
+                                                name: c => `${c.firstName || ''} ${c.lastName || ''}`.trim(),
+                                                atorRating: c => c.atorRating || 0,
+                                            }).map(contact => (
                                                 <tr key={contact.id} onClick={() => navigate(`/contacts/${contact.id}`)} style={{ cursor: 'pointer' }}>
                                                     <td className="table-cell-main">{contact.firstName} {contact.lastName}</td>
                                                     <td className="table-cell-secondary">{contact.role}</td>
                                                     <td className="table-cell-secondary">{contact.email}</td>
                                                     <td className="table-cell-secondary">{contact.phone}</td>
-                                                    <td>
-                                                        <StarRating value={contact.atorRating || 0} max={10} readOnly label="" />
+                                                    <td onClick={e => e.stopPropagation()}>
+                                                        <StarRating
+                                                            value={contact.atorRating || 0}
+                                                            max={10}
+                                                            label=""
+                                                            onChange={(val) => dispatch({ type: ACTIONS.UPDATE_CONTACT, payload: { ...contact, atorRating: val } })}
+                                                        />
                                                     </td>
                                                     <td onClick={e => e.stopPropagation()}>
                                                         <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteContact(contact.id)}>
@@ -613,6 +750,14 @@ export default function CompanyDetail() {
                     </div>
                 </form>
             </Modal>
+
+            {/* Add Workshop Modal */}
+            <WorkshopModal
+                isOpen={showWorkshopModal}
+                onClose={() => { setShowWorkshopModal(false); setSelectedWorkshop(null); }}
+                editItem={selectedWorkshop}
+                defaultCompanyId={id}
+            />
         </>
     );
 }

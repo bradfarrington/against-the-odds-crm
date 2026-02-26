@@ -326,6 +326,13 @@ export async function reorderWorkshopStages(updates) {
     );
 }
 
+// Pipelines
+export const fetchPipelines = () => fetchAll('pipelines', 'sort_order');
+export const createPipeline = (d) => insertRow('pipelines', d);
+export const modifyPipeline = (id, d) => updateRow('pipelines', id, d);
+export const removePipeline = (id) => deleteRow('pipelines', id);
+
+
 // Company Types
 export const fetchCompanyTypes = () => fetchAll('company_types', 'sort_order');
 export const createCompanyType = (d) => insertRow('company_types', d);
@@ -343,6 +350,12 @@ export const fetchCompanyStatuses = () => fetchAll('company_statuses', 'sort_ord
 export const createCompanyStatus = (d) => insertRow('company_statuses', d);
 export const modifyCompanyStatus = (id, d) => updateRow('company_statuses', id, d);
 export const removeCompanyStatus = (id) => deleteRow('company_statuses', id);
+
+// Workshop Types
+export const fetchWorkshopTypes = () => fetchAll('workshop_types', 'sort_order');
+export const createWorkshopType = (d) => insertRow('workshop_types', d);
+export const modifyWorkshopType = (id, d) => updateRow('workshop_types', id, d);
+export const removeWorkshopType = (id) => deleteRow('workshop_types', id);
 
 // ─── Surveys ──────────────────────────────────────────────────
 

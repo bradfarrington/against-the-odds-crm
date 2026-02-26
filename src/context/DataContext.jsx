@@ -85,6 +85,10 @@ const ACTIONS = {
     ADD_WORKSHOP_STAGE: 'ADD_WORKSHOP_STAGE',
     UPDATE_WORKSHOP_STAGE: 'UPDATE_WORKSHOP_STAGE',
     DELETE_WORKSHOP_STAGE: 'DELETE_WORKSHOP_STAGE',
+    // Pipelines
+    ADD_PIPELINE: 'ADD_PIPELINE',
+    UPDATE_PIPELINE: 'UPDATE_PIPELINE',
+    DELETE_PIPELINE: 'DELETE_PIPELINE',
     // Seeker Survey Answers
     UPDATE_SEEKER_SURVEY_ANSWERS: 'UPDATE_SEEKER_SURVEY_ANSWERS',
     // Company Lookup Tables
@@ -97,6 +101,10 @@ const ACTIONS = {
     ADD_COMPANY_STATUS: 'ADD_COMPANY_STATUS',
     UPDATE_COMPANY_STATUS: 'UPDATE_COMPANY_STATUS',
     DELETE_COMPANY_STATUS: 'DELETE_COMPANY_STATUS',
+    // Workshop Types
+    ADD_WORKSHOP_TYPE: 'ADD_WORKSHOP_TYPE',
+    UPDATE_WORKSHOP_TYPE: 'UPDATE_WORKSHOP_TYPE',
+    DELETE_WORKSHOP_TYPE: 'DELETE_WORKSHOP_TYPE',
 };
 
 // ─── Initial empty state ──────────────────────────────────────
@@ -120,9 +128,11 @@ const emptyState = {
     recoveryResources: [],
     surveys: [],
     workshopStages: [],
+    pipelines: [],
     companyTypes: [],
     companyIndustries: [],
     companyStatuses: [],
+    workshopTypes: [],
 };
 
 // ─── Reducer ──────────────────────────────────────────────────
@@ -299,6 +309,11 @@ function dataReducer(state, action) {
         case ACTIONS.UPDATE_WORKSHOP_STAGE: return crudLocal(state, 'workshopStages', { crud: 'UPDATE', payload: action.payload });
         case ACTIONS.DELETE_WORKSHOP_STAGE: return crudLocal(state, 'workshopStages', { crud: 'DELETE', payload: action.payload });
 
+        // Pipelines
+        case ACTIONS.ADD_PIPELINE: return crudLocal(state, 'pipelines', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_PIPELINE: return crudLocal(state, 'pipelines', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_PIPELINE: return crudLocal(state, 'pipelines', { crud: 'DELETE', payload: action.payload });
+
         // Company Lookup Tables
         case ACTIONS.ADD_COMPANY_TYPE: return crudLocal(state, 'companyTypes', { crud: 'ADD', payload: action.payload });
         case ACTIONS.UPDATE_COMPANY_TYPE: return crudLocal(state, 'companyTypes', { crud: 'UPDATE', payload: action.payload });
@@ -309,6 +324,11 @@ function dataReducer(state, action) {
         case ACTIONS.ADD_COMPANY_STATUS: return crudLocal(state, 'companyStatuses', { crud: 'ADD', payload: action.payload });
         case ACTIONS.UPDATE_COMPANY_STATUS: return crudLocal(state, 'companyStatuses', { crud: 'UPDATE', payload: action.payload });
         case ACTIONS.DELETE_COMPANY_STATUS: return crudLocal(state, 'companyStatuses', { crud: 'DELETE', payload: action.payload });
+
+        // Workshop Types
+        case ACTIONS.ADD_WORKSHOP_TYPE: return crudLocal(state, 'workshopTypes', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_WORKSHOP_TYPE: return crudLocal(state, 'workshopTypes', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_WORKSHOP_TYPE: return crudLocal(state, 'workshopTypes', { crud: 'DELETE', payload: action.payload });
 
         // Seeker Survey Answers
         case ACTIONS.UPDATE_SEEKER_SURVEY_ANSWERS: {
@@ -421,6 +441,10 @@ const apiMap = {
     [ACTIONS.UPDATE_WORKSHOP_STAGE]: (p) => api.modifyWorkshopStage(p.id, p),
     [ACTIONS.DELETE_WORKSHOP_STAGE]: (p) => api.removeWorkshopStage(p),
 
+    [ACTIONS.ADD_PIPELINE]: (p) => api.createPipeline(p),
+    [ACTIONS.UPDATE_PIPELINE]: (p) => api.modifyPipeline(p.id, p),
+    [ACTIONS.DELETE_PIPELINE]: (p) => api.removePipeline(p),
+
     [ACTIONS.UPDATE_SEEKER_SURVEY_ANSWERS]: (p) => api.upsertSeekerSurveyAnswers(p.seekerId, p.surveyId, p.answers),
 
     [ACTIONS.ADD_COMPANY_TYPE]: (p) => api.createCompanyType(p),
@@ -432,6 +456,9 @@ const apiMap = {
     [ACTIONS.ADD_COMPANY_STATUS]: (p) => api.createCompanyStatus(p),
     [ACTIONS.UPDATE_COMPANY_STATUS]: (p) => api.modifyCompanyStatus(p.id, p),
     [ACTIONS.DELETE_COMPANY_STATUS]: (p) => api.removeCompanyStatus(p),
+    [ACTIONS.ADD_WORKSHOP_TYPE]: (p) => api.createWorkshopType(p),
+    [ACTIONS.UPDATE_WORKSHOP_TYPE]: (p) => api.modifyWorkshopType(p.id, p),
+    [ACTIONS.DELETE_WORKSHOP_TYPE]: (p) => api.removeWorkshopType(p),
 };
 
 // ─── Provider ──────────────────────────────────────────────────
@@ -455,8 +482,9 @@ export function DataProvider({ children }) {
                 companies, contacts, recoverySeekers, campaigns, staff,
                 projects, tasks, contracts, meetingNotes, preventionSchedule,
                 invoices, targets, templates, preventionResources, recoveryResources,
-                taskCategories, surveys, workshopStages,
+                taskCategories, surveys, workshopStages, pipelines,
                 companyTypes, companyIndustries, companyStatuses,
+                workshopTypes,
             ] = await Promise.all([
                 api.fetchCompanies(),
                 api.fetchContacts(),
@@ -476,9 +504,11 @@ export function DataProvider({ children }) {
                 api.fetchTaskCategories(),
                 api.fetchSurveys(),
                 api.fetchWorkshopStages(),
+                api.fetchPipelines(),
                 api.fetchCompanyTypes(),
                 api.fetchCompanyIndustries(),
                 api.fetchCompanyStatuses(),
+                api.fetchWorkshopTypes(),
             ]);
             rawDispatch({
                 type: ACTIONS.SET_DATA,
@@ -486,8 +516,9 @@ export function DataProvider({ children }) {
                     companies, contacts, recoverySeekers, campaigns, staff,
                     projects, tasks, contracts, meetingNotes, preventionSchedule,
                     invoices, targets, templates, preventionResources, recoveryResources,
-                    taskCategories, surveys, workshopStages,
+                    taskCategories, surveys, workshopStages, pipelines,
                     companyTypes, companyIndustries, companyStatuses,
+                    workshopTypes,
                 },
             });
         } catch (err) {

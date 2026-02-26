@@ -5,6 +5,8 @@ import { Users, Plus, Mail, Phone, Edit2, Trash2 } from 'lucide-react';
 import SearchBar from '../components/SearchBar';
 import StatusBadge from '../components/StatusBadge';
 import RecoverySeekerModal from '../components/RecoverySeekerModal';
+import useTableSort from '../components/useTableSort';
+import SortableHeader from '../components/SortableHeader';
 
 export default function RecoverySeekersList() {
     const { state, dispatch } = useData();
@@ -12,6 +14,7 @@ export default function RecoverySeekersList() {
     const [search, setSearch] = useState('');
     const [editingSeeker, setEditingSeeker] = useState(null);
     const [isCreating, setIsCreating] = useState(false);
+    const { sortConfig, requestSort, sortedData } = useTableSort();
 
     const filtered = state.recoverySeekers.filter(s => {
         const matchesSearch = (
@@ -56,16 +59,18 @@ export default function RecoverySeekersList() {
                         <table className="data-table">
                             <thead>
                                 <tr>
-                                    <th>Name</th>
-                                    <th>Email</th>
-                                    <th>Phone</th>
-                                    <th>Treatment Stage</th>
-                                    <th>Risk Level</th>
+                                    <SortableHeader label="Name" sortKey="name" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Email" sortKey="email" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Phone" sortKey="phone" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Treatment Stage" sortKey="status" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Risk Level" sortKey="riskLevel" sortConfig={sortConfig} onSort={requestSort} />
                                     <th></th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {filtered.map(seeker => (
+                                {sortedData(filtered, {
+                                    name: s => `${s.firstName || ''} ${s.lastName || ''}`.trim(),
+                                }).map(seeker => (
                                     <tr key={seeker.id} onClick={() => navigate(`/recovery-seekers/${seeker.id}`)}>
                                         <td>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>

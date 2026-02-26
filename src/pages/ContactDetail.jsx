@@ -4,12 +4,15 @@ import { useData, ACTIONS } from '../context/DataContext';
 import {
     ArrowLeft, Users, Mail, Phone, Building2, Globe, Calendar,
     MapPin, Receipt, BookOpen, ExternalLink, Edit2, Trash2,
-    Linkedin, Twitter, Instagram, Facebook, Link, Star
+    Linkedin, Twitter, Instagram, Facebook, Link, Star, Plus
 } from 'lucide-react';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
+import DateTimePicker from '../components/DateTimePicker';
 import EmailTimeline from '../components/EmailTimeline';
 import AppointmentList from '../components/AppointmentList';
+import useTableSort from '../components/useTableSort';
+import SortableHeader from '../components/SortableHeader';
 
 function StarRating({ value = 0, max = 10, onChange, label = 'ATOR Rating', readOnly = false }) {
     const [hovered, setHovered] = useState(0);
@@ -60,17 +63,22 @@ export default function ContactDetail() {
 
     const [activeTab, setActiveTab] = useState('overview');
     const [showSocialModal, setShowSocialModal] = useState(false);
+    const [showInvoiceModal, setShowInvoiceModal] = useState(false);
     const [socialForm, setSocialForm] = useState({
         linkedinUrl: '', twitterUrl: '', instagramUrl: '', facebookUrl: '', websiteUrl: ''
     });
     const [showEditModal, setShowEditModal] = useState(false);
     const [editForm, setEditForm] = useState({});
+    const meetingSort = useTableSort();
+    const invoiceSort = useTableSort();
+    const workshopSort = useTableSort();
 
     const contact = state.contacts.find(c => c.id === id);
     const company = contact ? state.companies.find(c => c.id === contact.companyId) : null;
     const meetings = state.meetingNotes.filter(m => m.contactIds?.includes(id));
-    const invoices = contact ? state.invoices.filter(i => i.companyId === contact.companyId) : [];
     const workshops = state.preventionSchedule.filter(w => w.contactId === id);
+    const workshopIds = new Set(workshops.map(w => w.id));
+    const invoices = contact ? state.invoices.filter(i => i.contactId === id || (i.workshopId && workshopIds.has(i.workshopId))) : [];
 
     if (!contact) {
         return (
@@ -371,23 +379,23 @@ export default function ContactDetail() {
                                     <table className="data-table">
                                         <thead>
                                             <tr>
-                                                <th>Title</th>
-                                                <th>Type</th>
-                                                <th>Date</th>
-                                                <th>Location</th>
+                                                <SortableHeader label="Title" sortKey="title" sortConfig={meetingSort.sortConfig} onSort={meetingSort.requestSort} />
+                                                <SortableHeader label="Type" sortKey="meetingType" sortConfig={meetingSort.sortConfig} onSort={meetingSort.requestSort} />
+                                                <SortableHeader label="Date" sortKey="date" sortConfig={meetingSort.sortConfig} onSort={meetingSort.requestSort} />
+                                                <SortableHeader label="Location" sortKey="location" sortConfig={meetingSort.sortConfig} onSort={meetingSort.requestSort} />
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {[...meetings]
-                                                .sort((a, b) => new Date(b.date) - new Date(a.date))
-                                                .map(m => (
-                                                    <tr key={m.id}>
-                                                        <td className="table-cell-main">{m.title}</td>
-                                                        <td><span className="badge badge-neutral">{m.meetingType}</span></td>
-                                                        <td className="table-cell-secondary">{fmtDate(m.date)}</td>
-                                                        <td className="table-cell-secondary">{m.location || '—'}</td>
-                                                    </tr>
-                                                ))}
+                                            {meetingSort.sortedData(meetings, {
+                                                date: m => m.date ? new Date(m.date) : null,
+                                            }).map(m => (
+                                                <tr key={m.id}>
+                                                    <td className="table-cell-main">{m.title}</td>
+                                                    <td><span className="badge badge-neutral">{m.meetingType}</span></td>
+                                                    <td className="table-cell-secondary">{fmtDate(m.date)}</td>
+                                                    <td className="table-cell-secondary">{m.location || '—'}</td>
+                                                </tr>
+                                            ))}
                                         </tbody>
                                     </table>
                                 </div>
@@ -410,43 +418,42 @@ export default function ContactDetail() {
                         <div className="card">
                             <div className="card-header">
                                 <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-                                    <Receipt size={18} /> Company Invoices
+                                    <Receipt size={18} /> Invoices
                                     <span className="badge badge-neutral" style={{ marginLeft: 4 }}>{invoices.length}</span>
                                 </h3>
-                                {company && (
-                                    <span className="table-cell-secondary" style={{ fontSize: 12 }}>
-                                        Showing invoices for {company.name}
-                                    </span>
-                                )}
+                                <button className="btn btn-primary btn-sm" onClick={() => setShowInvoiceModal(true)}>
+                                    <Plus size={16} /> New Invoice
+                                </button>
                             </div>
                             {invoices.length > 0 ? (
                                 <div className="data-table-wrapper">
                                     <table className="data-table">
                                         <thead>
                                             <tr>
-                                                <th>Invoice #</th>
-                                                <th>Description</th>
-                                                <th>Amount</th>
-                                                <th>Status</th>
-                                                <th>Issued</th>
-                                                <th>Due</th>
+                                                <SortableHeader label="Invoice #" sortKey="invoiceNumber" sortConfig={invoiceSort.sortConfig} onSort={invoiceSort.requestSort} />
+                                                <SortableHeader label="Description" sortKey="description" sortConfig={invoiceSort.sortConfig} onSort={invoiceSort.requestSort} />
+                                                <SortableHeader label="Amount" sortKey="amount" sortConfig={invoiceSort.sortConfig} onSort={invoiceSort.requestSort} />
+                                                <SortableHeader label="Status" sortKey="status" sortConfig={invoiceSort.sortConfig} onSort={invoiceSort.requestSort} />
+                                                <SortableHeader label="Issued" sortKey="dateIssued" sortConfig={invoiceSort.sortConfig} onSort={invoiceSort.requestSort} />
+                                                <SortableHeader label="Due" sortKey="dateDue" sortConfig={invoiceSort.sortConfig} onSort={invoiceSort.requestSort} />
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {[...invoices]
-                                                .sort((a, b) => new Date(b.dateIssued) - new Date(a.dateIssued))
-                                                .map(inv => (
-                                                    <tr key={inv.id}>
-                                                        <td className="table-cell-main">{inv.invoiceNumber}</td>
-                                                        <td className="table-cell-secondary" style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                            {inv.description || '—'}
-                                                        </td>
-                                                        <td className="table-cell-main">£{(inv.amount || 0).toLocaleString()}</td>
-                                                        <td><StatusBadge status={inv.status} /></td>
-                                                        <td className="table-cell-secondary">{fmtDate(inv.dateIssued)}</td>
-                                                        <td className="table-cell-secondary">{fmtDate(inv.dateDue)}</td>
-                                                    </tr>
-                                                ))}
+                                            {invoiceSort.sortedData(invoices, {
+                                                dateIssued: inv => inv.dateIssued ? new Date(inv.dateIssued) : null,
+                                                dateDue: inv => inv.dateDue ? new Date(inv.dateDue) : null,
+                                            }).map(inv => (
+                                                <tr key={inv.id}>
+                                                    <td className="table-cell-main">{inv.invoiceNumber}</td>
+                                                    <td className="table-cell-secondary" style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        {inv.description || '—'}
+                                                    </td>
+                                                    <td className="table-cell-main">£{(inv.amount || 0).toLocaleString()}</td>
+                                                    <td><StatusBadge status={inv.status} /></td>
+                                                    <td className="table-cell-secondary">{fmtDate(inv.dateIssued)}</td>
+                                                    <td className="table-cell-secondary">{fmtDate(inv.dateDue)}</td>
+                                                </tr>
+                                            ))}
                                         </tbody>
                                     </table>
                                 </div>
@@ -455,13 +462,97 @@ export default function ContactDetail() {
                                     <div className="empty-state" style={{ padding: 'var(--space-xl)' }}>
                                         <Receipt />
                                         <h3>No invoices found</h3>
-                                        <p>{company ? `No invoices exist for ${company.name}` : 'This contact has no associated company'}</p>
+                                        <p>No invoices are linked to this contact</p>
                                     </div>
                                 </div>
                             )}
                         </div>
                     </div>
                 )}
+
+                <Modal isOpen={showInvoiceModal} onClose={() => setShowInvoiceModal(false)} title="New Invoice">
+                    <form onSubmit={(e) => {
+                        e.preventDefault();
+                        const fd = new FormData(e.target);
+                        const data = Object.fromEntries(fd);
+                        data.amount = parseFloat(data.amount) || 0;
+                        if (!data.dateIssued) data.dateIssued = null;
+                        if (!data.dateDue) data.dateDue = null;
+                        if (!data.datePaid) data.datePaid = null;
+                        data.category = 'Prevention';
+                        data.contactId = id;
+                        if (!data.workshopId) data.workshopId = null;
+                        dispatch({ type: ACTIONS.ADD_INVOICE, payload: data });
+                        setShowInvoiceModal(false);
+                    }}>
+                        <div className="modal-body">
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label className="form-label">Invoice Number</label>
+                                    <input className="form-input" name="invoiceNumber" defaultValue={`ATO-2026-${String((state.invoices || []).length + 1).padStart(3, '0')}`} required />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Status</label>
+                                    <select className="form-select" name="status" defaultValue="Draft">
+                                        <option>Draft</option><option>Sent</option><option>Paid</option><option>Overdue</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label className="form-label">Organisation</label>
+                                    <select className="form-select" name="companyId" defaultValue={contact?.companyId || ''} required>
+                                        <option value="">Select…</option>
+                                        {state.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Amount (£)</label>
+                                    <input className="form-input" name="amount" type="number" required />
+                                </div>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Description</label>
+                                <textarea className="form-textarea" name="description" required />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Link to Workshop (optional)</label>
+                                <select className="form-select" name="workshopId" defaultValue="">
+                                    <option value="">None</option>
+                                    {(state.preventionSchedule || []).map(w => <option key={w.id} value={w.id}>{w.title}</option>)}
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Contact</label>
+                                <select className="form-select" name="contactId" defaultValue={id} disabled>
+                                    <option value={id}>{contact?.firstName} {contact?.lastName}</option>
+                                </select>
+                            </div>
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label className="form-label">Date Issued</label>
+                                    <DateTimePicker name="dateIssued" mode="date" value="" />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Date Due</label>
+                                    <DateTimePicker name="dateDue" mode="date" value="" />
+                                </div>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Date Paid</label>
+                                <DateTimePicker name="datePaid" mode="date" value="" />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Notes</label>
+                                <textarea className="form-textarea" name="notes" />
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button type="button" className="btn btn-secondary" onClick={() => setShowInvoiceModal(false)}>Cancel</button>
+                            <button type="submit" className="btn btn-primary">Create Invoice</button>
+                        </div>
+                    </form>
+                </Modal>
 
                 {/* Workshops Tab */}
                 {activeTab === 'workshops' && (
@@ -478,29 +569,42 @@ export default function ContactDetail() {
                                     <table className="data-table">
                                         <thead>
                                             <tr>
-                                                <th>Title</th>
-                                                <th>Type</th>
-                                                <th>Date</th>
-                                                <th>Location</th>
-                                                <th>Status</th>
-                                                <th>Attendees</th>
+                                                <SortableHeader label="Title" sortKey="title" sortConfig={workshopSort.sortConfig} onSort={workshopSort.requestSort} />
+                                                <SortableHeader label="Type" sortKey="workshopType" sortConfig={workshopSort.sortConfig} onSort={workshopSort.requestSort} />
+                                                <SortableHeader label="Date" sortKey="date" sortConfig={workshopSort.sortConfig} onSort={workshopSort.requestSort} />
+                                                <SortableHeader label="Location" sortKey="location" sortConfig={workshopSort.sortConfig} onSort={workshopSort.requestSort} />
+                                                <SortableHeader label="Status" sortKey="status" sortConfig={workshopSort.sortConfig} onSort={workshopSort.requestSort} />
+                                                <SortableHeader label="Attendees" sortKey="attendeeCount" sortConfig={workshopSort.sortConfig} onSort={workshopSort.requestSort} />
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {[...workshops]
-                                                .sort((a, b) => new Date(b.date) - new Date(a.date))
-                                                .map(w => (
-                                                    <tr key={w.id}>
+                                            {workshopSort.sortedData(workshops, {
+                                                date: w => w.date ? new Date(w.date) : null,
+                                                attendeeCount: w => w.attendeeCount ?? 0,
+                                            }).map(w => {
+                                                const stage = (state.workshopStages || []).find(s => s.name === w.status);
+                                                return (
+                                                    <tr key={w.id} onClick={() => navigate(`/workshops/${w.id}`)} style={{ cursor: 'pointer' }}>
                                                         <td className="table-cell-main">{w.title}</td>
                                                         <td className="table-cell-secondary">{w.workshopType}</td>
                                                         <td className="table-cell-secondary">{fmtDate(w.date)}</td>
                                                         <td className="table-cell-secondary">{w.location || '—'}</td>
-                                                        <td><StatusBadge status={w.status} /></td>
+                                                        <td>
+                                                            {stage ? (
+                                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500 }}>
+                                                                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: stage.color, flexShrink: 0 }} />
+                                                                    {stage.label}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="badge badge-neutral">{w.status || '—'}</span>
+                                                            )}
+                                                        </td>
                                                         <td className="table-cell-secondary">
                                                             {w.attendeeCount ?? '—'}{w.maxCapacity ? ` / ${w.maxCapacity}` : ''}
                                                         </td>
                                                     </tr>
-                                                ))}
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>

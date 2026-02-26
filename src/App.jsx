@@ -15,6 +15,7 @@ import RecoverySeekersList from './pages/RecoverySeekersList';
 import SeekerDetail from './pages/SeekerDetail';
 import Tasks from './pages/Tasks';
 import WorkshopTracker from './pages/WorkshopTracker';
+import WorkshopDetail from './pages/WorkshopDetail';
 import PreventionResources from './pages/PreventionResources';
 import RecoveryResources from './pages/RecoveryResources';
 import Invoices from './pages/Invoices';
@@ -72,6 +73,7 @@ function AppRoutes() {
           <Route path="meeting-notes/:id" element={<MeetingNoteDetail />} />
           {/* Prevention */}
           <Route path="workshop-tracker" element={<WorkshopTracker />} />
+          <Route path="workshops/:id" element={<WorkshopDetail />} />
           <Route path="prevention/resources" element={<PreventionResources />} />
           <Route path="prevention/invoices" element={<Invoices category="Prevention" />} />
           <Route path="prevention/surveys" element={<Surveys type="prevention" />} />

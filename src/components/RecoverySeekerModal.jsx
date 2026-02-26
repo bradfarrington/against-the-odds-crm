@@ -2,56 +2,40 @@ import { useState, useEffect } from 'react';
 import { useData, ACTIONS } from '../context/DataContext';
 import { Trash2 } from 'lucide-react';
 import Modal from './Modal';
+import DateTimePicker from './DateTimePicker';
 
-export default function RecoverySeekerModal({ isOpen, onClose, item = null }) {
-    const { dispatch } = useData();
+export default function RecoverySeekerModal({ isOpen, onClose, item = null, pipelineId }) {
+    const { state, dispatch } = useData();
 
     const [form, setForm] = useState({
         firstName: '', lastName: '', dateOfBirth: '', email: '', phone: '', address: '',
-        gender: '', referralSource: '', status: 'New Enquiry', riskLevel: 'Medium',
+        gender: '', referralSource: '', status: '', riskLevel: 'Medium',
         gamblingType: '', gamblingFrequency: '', gamblingDuration: '', gamblingTriggers: '',
         notes: '',
     });
 
-    const [pipelines, setPipelines] = useState({
-        enquiries: [
-            { key: 'New Enquiry', label: 'New Enquiry' },
-            { key: 'Contacted', label: 'Contacted' },
-            { key: 'Assessment Booked', label: 'Assessment Booked' },
-            { key: 'Lost', label: 'Lost' }
-        ],
-        active: [
-            { key: 'Active', label: 'Awaiting Start' },
-            { key: 'In Treatment', label: 'In Treatment' },
-            { key: 'On Hold', label: 'On Hold' },
-            { key: 'Completed', label: 'Completed' },
-            { key: 'Dropped Out', label: 'Dropped Out' }
-        ]
-    });
+    // Get treatment pipelines and their stages from Supabase
+    const treatmentPipelines = (state.pipelines || []).filter(p => p.trackerType === 'treatment').sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    const allStages = state.workshopStages || [];
 
-    useEffect(() => {
-        const saved = localStorage.getItem('ato-treatment-pipelines');
-        if (saved) {
-            try {
-                setPipelines(JSON.parse(saved));
-            } catch (e) { console.error(e); }
-        }
-    }, []);
+    // Get the first stage of the active pipeline as default
+    const activePipelineStages = allStages.filter(s => s.pipelineId === pipelineId).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    const defaultStatus = activePipelineStages[0]?.name || '';
 
     useEffect(() => {
         if (isOpen) {
             if (item) {
-                setForm({ ...item, status: item.status || 'New Enquiry' });
+                setForm({ ...item, status: item.status || defaultStatus });
             } else {
                 setForm({
                     firstName: '', lastName: '', dateOfBirth: '', email: '', phone: '', address: '',
-                    gender: '', referralSource: '', status: 'New Enquiry', riskLevel: 'Medium',
+                    gender: '', referralSource: '', status: defaultStatus, riskLevel: 'Medium',
                     gamblingType: '', gamblingFrequency: '', gamblingDuration: '', gamblingTriggers: '',
                     notes: '',
                 });
             }
         }
-    }, [isOpen, item]);
+    }, [isOpen, item, defaultStatus]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -60,7 +44,8 @@ export default function RecoverySeekerModal({ isOpen, onClose, item = null }) {
             dispatch({ type: ACTIONS.UPDATE_SEEKER, payload: { id: item.id, ...form } });
         } else {
             const data = { ...form };
-            if (!data.status) data.status = 'New Enquiry';
+            if (!data.status) data.status = defaultStatus;
+            if (pipelineId) data.pipelineId = pipelineId;
             dispatch({ type: ACTIONS.ADD_SEEKER, payload: data });
         }
         onClose();
@@ -94,7 +79,7 @@ export default function RecoverySeekerModal({ isOpen, onClose, item = null }) {
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">Date of Birth</label>
-                            <input className="form-input" type="date" value={form.dateOfBirth} onChange={e => updateForm('dateOfBirth', e.target.value)} />
+                            <DateTimePicker mode="date" value={form.dateOfBirth} onChange={e => updateForm('dateOfBirth', e.target.value)} />
                         </div>
                         <div className="form-group">
                             <label className="form-label">Gender</label>
@@ -177,12 +162,15 @@ export default function RecoverySeekerModal({ isOpen, onClose, item = null }) {
                         <div className="form-group">
                             <label className="form-label">Stage</label>
                             <select className="form-select" value={form.status} onChange={e => updateForm('status', e.target.value)}>
-                                <optgroup label="Enquiries">
-                                    {pipelines.enquiries.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-                                </optgroup>
-                                <optgroup label="Active">
-                                    {pipelines.active.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-                                </optgroup>
+                                {treatmentPipelines.map(pipeline => {
+                                    const stages = allStages.filter(s => s.pipelineId === pipeline.id).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+                                    if (stages.length === 0) return null;
+                                    return (
+                                        <optgroup key={pipeline.id} label={pipeline.name}>
+                                            {stages.map(s => <option key={s.id} value={s.name}>{s.label}</option>)}
+                                        </optgroup>
+                                    );
+                                })}
                             </select>
                         </div>
                     </div>

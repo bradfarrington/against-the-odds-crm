@@ -5,6 +5,8 @@ import * as api from '../lib/api';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import { Plus, Pencil, Trash2, Link, ClipboardList, Search } from 'lucide-react';
+import useTableSort from '../components/useTableSort';
+import SortableHeader from '../components/SortableHeader';
 
 const STATUS_COLORS = {
     draft: 'grey',
@@ -22,6 +24,7 @@ export default function Surveys({ type }) {
     const [newTitle, setNewTitle] = useState('');
     const [creating, setCreating] = useState(false);
     const [copyMessage, setCopyMessage] = useState('');
+    const { sortConfig, requestSort, sortedData } = useTableSort();
 
     const typeName = type === 'prevention' ? 'Prevention' : 'Recovery';
     const basePath = `/${type}/surveys`;
@@ -148,15 +151,18 @@ export default function Surveys({ type }) {
                             <table className="data-table">
                                 <thead>
                                     <tr>
-                                        <th>Title</th>
-                                        <th>Status</th>
-                                        <th>Questions</th>
-                                        <th>Created</th>
+                                        <SortableHeader label="Title" sortKey="title" sortConfig={sortConfig} onSort={requestSort} />
+                                        <SortableHeader label="Status" sortKey="status" sortConfig={sortConfig} onSort={requestSort} />
+                                        <SortableHeader label="Questions" sortKey="questionCount" sortConfig={sortConfig} onSort={requestSort} />
+                                        <SortableHeader label="Created" sortKey="createdAt" sortConfig={sortConfig} onSort={requestSort} />
                                         <th style={{ width: 120 }}>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filtered.map(survey => (
+                                    {sortedData(filtered, {
+                                        questionCount: s => s.questionCount ?? 0,
+                                        createdAt: s => s.createdAt ? new Date(s.createdAt) : null,
+                                    }).map(survey => (
                                         <tr key={survey.id}>
                                             <td>
                                                 <span

@@ -350,16 +350,19 @@ export default function Calendar() {
             });
         });
 
-        // Add Workshops
+        // Add Workshops — always rendered as all-day / multi-day banner events
         const workshops = dataState.preventionSchedule || [];
         workshops.forEach(workshop => {
             if (!workshop.date) return;
+            // Ensure date-only strings (YYYY-MM-DD) for consistent all-day rendering
+            const startDate = (workshop.date || '').slice(0, 10);
+            const endDate = (workshop.endTime || workshop.date || '').slice(0, 10);
             events.push({
                 id: `ws-${workshop.id || Math.random()}`,
                 title: `Workshop: ${workshop.title}`,
-                start_time: workshop.date, // Actual datetime if available
-                end_time: workshop.endTime || workshop.date, // Assuming endTime exists, otherwise falls back
-                is_all_day: !workshop.date.includes('T') && !workshop.endTime, // If no time part
+                start_time: startDate,
+                end_time: endDate,
+                is_all_day: true,
                 description: workshop.notes || '',
                 eventType: 'workshop',
                 originalWorkshop: workshop

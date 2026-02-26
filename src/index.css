@@ -892,6 +892,39 @@ a:hover {
   font-size: 13px;
 }
 
+/* Sortable Headers */
+.sortable-header {
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--transition-fast);
+}
+
+.sortable-header:hover {
+  color: var(--text-primary);
+}
+
+.sortable-header-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sort-icon {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.35;
+  transition: opacity var(--transition-fast);
+}
+
+.sortable-header:hover .sort-icon {
+  opacity: 0.6;
+}
+
+.sort-icon.active {
+  opacity: 1;
+  color: var(--primary);
+}
+
 /* ============================
    BADGES
    ============================ */

@@ -1,46 +1,71 @@
 import { useState, useRef, useEffect } from 'react';
 import { useData } from '../context/DataContext';
-import { ImagePlus, Trash2, UploadCloud, Loader2 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { ImagePlus, Trash2, UploadCloud, Loader2, Plus, Clock } from 'lucide-react';
 import Modal from './Modal';
 import { supabase } from '../lib/supabaseClient';
 import DateTimePicker from './DateTimePicker';
 
-export default function WorkshopModal({ isOpen, onClose, editItem }) {
+export default function WorkshopModal({ isOpen, onClose, editItem, pipelineId, defaultCompanyId }) {
     const { state, dispatch, ACTIONS } = useData();
+    const { user } = useAuth();
     const [imageUrl, setImageUrl] = useState('');
     const [uploading, setUploading] = useState(false);
-    const [durationHours, setDurationHours] = useState(1);
-    const [durationMinutes, setDurationMinutes] = useState(0);
+    const [selectedPipelineId, setSelectedPipelineId] = useState('');
+    const [newNote, setNewNote] = useState('');
     const fileInputRef = useRef(null);
 
     const staff = state.staff || [];
     const companies = state.companies || [];
     const contacts = state.contacts || [];
-    const workshopStages = state.workshopStages || [];
+
+    const workshopTypes = (state.workshopTypes || []).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    // Fallback to hardcoded if no types in DB yet
+    const typeOptions = workshopTypes.length > 0
+        ? workshopTypes.map(t => t.name)
+        : ['Awareness', 'Prevention', 'Training'];
+
+    // Pipelines for the dropdown (workshop type only)
+    const allPipelines = (state.pipelines || []).filter(p => p.trackerType === 'workshop').sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
+    // Resolve the effective pipeline: prop > user selection
+    const effectivePipelineId = pipelineId || selectedPipelineId || null;
+
+    const workshopStages = (state.workshopStages || []).filter(s => !effectivePipelineId || s.pipelineId === effectivePipelineId).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
     const stageKeys = workshopStages.map(s => s.name);
+
+    // Extract date-only (YYYY-MM-DD) for the date pickers
+    const editStartDate = editItem?.date ? editItem.date.slice(0, 10) : '';
+    const editEndDate = editItem?.endTime ? editItem.endTime.slice(0, 10) : '';
 
     useEffect(() => {
         if (editItem) {
             setImageUrl(editItem.imageUrl || '');
-            let durH = 1;
-            let durM = 0;
-            if (editItem.endTime && editItem.date) {
-                const sTime = new Date(editItem.date).getTime();
-                const eTime = new Date(editItem.endTime).getTime();
-                if (!isNaN(sTime) && !isNaN(eTime) && eTime > sTime) {
-                    const diffMins = Math.floor((eTime - sTime) / 60000);
-                    durH = Math.floor(diffMins / 60);
-                    durM = diffMins % 60;
-                }
-            }
-            setDurationHours(durH);
-            setDurationMinutes(durM);
+            setSelectedPipelineId(editItem.pipelineId || '');
         } else {
             setImageUrl('');
-            setDurationHours(1);
-            setDurationMinutes(0);
+            setSelectedPipelineId(allPipelines[0]?.id || '');
         }
+        setNewNote('');
     }, [editItem, isOpen]);
+
+    const existingNotes = editItem?.workshopNotes || [];
+
+    const handleAddNote = () => {
+        if (!newNote.trim() || !editItem) return;
+        const currentStaff = staff.find(s => s.email === user?.email);
+        const note = {
+            id: crypto.randomUUID(),
+            text: newNote.trim(),
+            createdAt: new Date().toISOString(),
+            userName: currentStaff ? `${currentStaff.firstName} ${currentStaff.lastName}` : (user?.email || 'Unknown'),
+        };
+        const updatedNotes = [...existingNotes, note];
+        dispatch({ type: ACTIONS.UPDATE_WORKSHOP, payload: { id: editItem.id, workshopNotes: updatedNotes } });
+        setNewNote('');
+    };
+
+    const fmtNoteDate = (d) => d ? new Date(d).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '') : '';
 
     function getStage(w) {
         if (w && stageKeys.includes(w.status)) return w.status;
@@ -86,26 +111,31 @@ export default function WorkshopModal({ isOpen, onClose, editItem }) {
         if (!data.value) data.value = null;
         data.imageUrl = imageUrl || null;
 
-        // Calculate end time and convert date to ISO
-        if (data.date) {
-            const dt = new Date(data.date);
-            if (!isNaN(dt.getTime())) {
-                // Determine if we need to set ISO String (only if it has a time component naturally via the string)
-                if (data.date.length === 16) {
-                    data.date = dt.toISOString();
-                }
-                const endDateTime = new Date(dt);
-                endDateTime.setHours(endDateTime.getHours() + parseInt(durationHours));
-                endDateTime.setMinutes(endDateTime.getMinutes() + parseInt(durationMinutes));
-                data.endTime = endDateTime.toISOString();
-            }
+        // Store date and endTime as date-only strings (YYYY-MM-DD)
+        // endDate form field maps to endTime in the data model
+        if (data.endDate) {
+            data.endTime = data.endDate;
+            delete data.endDate;
         } else {
-            data.endTime = null;
+            data.endTime = data.date || null;
         }
 
         if (editItem) {
             dispatch({ type: ACTIONS.UPDATE_WORKSHOP, payload: { id: editItem.id, ...data } });
         } else {
+            const resolvedPipelineId = pipelineId || selectedPipelineId;
+            if (resolvedPipelineId) data.pipelineId = resolvedPipelineId;
+            // Convert initial notes text into timestamped workshopNotes array
+            if (data.notes && data.notes.trim()) {
+                const currentStaff = staff.find(s => s.email === user?.email);
+                data.workshopNotes = [{
+                    id: crypto.randomUUID(),
+                    text: data.notes.trim(),
+                    createdAt: new Date().toISOString(),
+                    userName: currentStaff ? `${currentStaff.firstName} ${currentStaff.lastName}` : (user?.email || 'Unknown'),
+                }];
+            }
+            delete data.notes;
             dispatch({ type: ACTIONS.ADD_WORKSHOP, payload: data });
         }
         onClose();
@@ -127,17 +157,30 @@ export default function WorkshopModal({ isOpen, onClose, editItem }) {
                         <label className="form-label">Workshop Title</label>
                         <input className="form-input" name="title" defaultValue={editItem?.title} required />
                     </div>
+                    {/* Pipeline selector — only shown when not opened from a specific pipeline context */}
+                    {!pipelineId && allPipelines.length > 0 && (
+                        <div className="form-group">
+                            <label className="form-label">Pipeline</label>
+                            <select
+                                className="form-select"
+                                value={selectedPipelineId}
+                                onChange={e => setSelectedPipelineId(e.target.value)}
+                            >
+                                {allPipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                        </div>
+                    )}
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">Stage</label>
-                            <select className="form-select" name="status" defaultValue={editItem ? getStage(editItem) : (stageKeys[0] || 'Initial Conversation')}>
+                            <select className="form-select" name="status" key={effectivePipelineId} defaultValue={editItem ? getStage(editItem) : (stageKeys[0] || 'Initial Conversation')}>
                                 {workshopStages.map(s => <option key={s.name} value={s.name}>{s.label}</option>)}
                             </select>
                         </div>
                         <div className="form-group">
                             <label className="form-label">Type</label>
-                            <select className="form-select" name="workshopType" defaultValue={editItem?.workshopType || 'Awareness'}>
-                                <option>Awareness</option><option>Prevention</option><option>Training</option>
+                            <select className="form-select" name="workshopType" defaultValue={editItem?.workshopType || typeOptions[0]}>
+                                {typeOptions.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                         </div>
                     </div>
@@ -189,7 +232,7 @@ export default function WorkshopModal({ isOpen, onClose, editItem }) {
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">Organisation</label>
-                            <select className="form-select" name="companyId" defaultValue={editItem?.companyId || ''}>
+                            <select className="form-select" name="companyId" defaultValue={editItem?.companyId || defaultCompanyId || ''}>
                                 <option value="">Select…</option>
                                 {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
@@ -216,33 +259,13 @@ export default function WorkshopModal({ isOpen, onClose, editItem }) {
                         </div>
                     </div>
                     <div className="form-row">
-                        <div className="form-group" style={{ flex: 1.5 }}>
-                            <label className="form-label">Start Date & Time</label>
-                            <DateTimePicker name="date" value={editItem?.date ? editItem.date.slice(0, 16) : ''} required />
+                        <div className="form-group">
+                            <label className="form-label">Start Date</label>
+                            <DateTimePicker name="date" mode="date" value={editStartDate} required />
                         </div>
-                        <div className="form-group" style={{ flex: 1 }}>
-                            <label className="form-label">Duration (Hours)</label>
-                            <select className="form-input" value={durationHours} onChange={e => {
-                                const h = parseInt(e.target.value);
-                                let m = durationMinutes;
-                                if (h === 0 && m < 15) m = 15;
-                                setDurationHours(h);
-                                setDurationMinutes(m);
-                            }}>
-                                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 24, 48].map(h => <option key={h} value={h}>{h} hr{h !== 1 ? 's' : ''}</option>)}
-                            </select>
-                        </div>
-                        <div className="form-group" style={{ flex: 1 }}>
-                            <label className="form-label">Duration (Minutes)</label>
-                            <select className="form-input" value={durationMinutes} onChange={e => {
-                                const m = parseInt(e.target.value);
-                                let h = durationHours;
-                                if (h === 0 && m < 15) h = 1;
-                                setDurationHours(h);
-                                setDurationMinutes(m);
-                            }}>
-                                {[0, 15, 30, 45].map(m => <option key={m} value={m}>{m} mins</option>)}
-                            </select>
+                        <div className="form-group">
+                            <label className="form-label">End Date</label>
+                            <DateTimePicker name="endDate" mode="date" value={editEndDate} dropdownAlign="right" />
                         </div>
                     </div>
                     <div className="form-row">
@@ -251,21 +274,47 @@ export default function WorkshopModal({ isOpen, onClose, editItem }) {
                             <input className="form-input" name="location" defaultValue={editItem?.location} />
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Capacity</label>
-                            <input className="form-input" name="maxCapacity" type="number" defaultValue={editItem?.maxCapacity} />
+                            <label className="form-label">Attendee Count</label>
+                            <input className="form-input" name="attendeeCount" type="number" defaultValue={editItem?.attendeeCount} />
                         </div>
                     </div>
+                    {/* Workshop Info / Notes */}
                     <div className="form-group">
-                        <label className="form-label">Attendee Count</label>
-                        <input className="form-input" name="attendeeCount" type="number" defaultValue={editItem?.attendeeCount} />
-                    </div>
-                    <div className="form-group">
-                        <label className="form-label">Notes</label>
-                        <textarea className="form-textarea" name="notes" defaultValue={editItem?.notes} />
-                    </div>
-                    <div className="form-group">
-                        <label className="form-label">Feedback</label>
-                        <textarea className="form-textarea" name="feedback" defaultValue={editItem?.feedback} placeholder="Post-workshop feedback…" />
+                        <label className="form-label">Workshop Info</label>
+                        {editItem && existingNotes.length > 0 && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)', maxHeight: 200, overflowY: 'auto', padding: 'var(--space-sm)', background: 'var(--bg-card)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                                {[...existingNotes].reverse().map(note => (
+                                    <div key={note.id} style={{ padding: 'var(--space-sm) var(--space-md)', background: 'var(--bg-input)', borderRadius: 'var(--radius-md)', fontSize: 13 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                            <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--text-primary)' }}>{note.userName}</span>
+                                            <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                <Clock size={10} />{fmtNoteDate(note.createdAt)}
+                                            </span>
+                                        </div>
+                                        <div style={{ color: 'var(--text-secondary)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{note.text}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {editItem ? (
+                            <div>
+                                <textarea
+                                    className="form-textarea"
+                                    value={newNote}
+                                    onChange={e => setNewNote(e.target.value)}
+                                    placeholder="Add a note…"
+                                    style={{ width: '100%', minHeight: 60, marginBottom: 'var(--space-sm)' }}
+                                    onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleAddNote(); } }}
+                                />
+                                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                    <button type="button" className="btn btn-primary btn-sm" onClick={handleAddNote} disabled={!newNote.trim()}>
+                                        <Plus size={14} /> Add Note
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <textarea className="form-textarea" name="notes" placeholder="Add workshop info notes…" />
+                        )}
                     </div>
                 </div>
                 <div className="modal-footer">

@@ -4,6 +4,8 @@ import { useData, ACTIONS } from '../context/DataContext';
 import { Users, Plus, Mail, Phone, Building2, Edit2, Trash2, Star } from 'lucide-react';
 import SearchBar from '../components/SearchBar';
 import Modal from '../components/Modal';
+import useTableSort from '../components/useTableSort';
+import SortableHeader from '../components/SortableHeader';
 
 // ─── Star Rating Component ──────────────────────────────────────
 
@@ -48,6 +50,7 @@ export default function Contacts() {
         firstName: '', lastName: '', role: '', email: '', phone: '', companyId: '', atorRating: 0, notes: ''
     });
     const [editingContact, setEditingContact] = useState(null);
+    const { sortConfig, requestSort, sortedData } = useTableSort();
     const [editForm, setEditForm] = useState({});
 
     const getCompanyName = (companyId) => {
@@ -124,17 +127,21 @@ export default function Contacts() {
                         <table className="data-table">
                             <thead>
                                 <tr>
-                                    <th>Name</th>
-                                    <th>Company</th>
-                                    <th>Role</th>
-                                    <th>Email</th>
-                                    <th>Phone</th>
-                                    <th>ATOR</th>
+                                    <SortableHeader label="Name" sortKey="name" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Company" sortKey="company" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Role" sortKey="role" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Email" sortKey="email" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="Phone" sortKey="phone" sortConfig={sortConfig} onSort={requestSort} />
+                                    <SortableHeader label="ATOR" sortKey="atorRating" sortConfig={sortConfig} onSort={requestSort} />
                                     <th></th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {filtered.map(contact => (
+                                {sortedData(filtered, {
+                                    name: c => `${c.firstName || ''} ${c.lastName || ''}`.trim(),
+                                    company: c => getCompanyName(c.companyId),
+                                    atorRating: c => c.atorRating || 0,
+                                }).map(contact => (
                                     <tr key={contact.id} onClick={() => navigate(`/contacts/${contact.id}`)}>
                                         <td>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
@@ -163,8 +170,13 @@ export default function Contacts() {
                                             </div>
                                         </td>
                                         <td className="table-cell-secondary">{contact.phone}</td>
-                                        <td>
-                                            <StarRating value={contact.atorRating || 0} max={10} readOnly size={14} />
+                                        <td onClick={e => e.stopPropagation()}>
+                                            <StarRating
+                                                value={contact.atorRating || 0}
+                                                max={10}
+                                                size={14}
+                                                onChange={(val) => dispatch({ type: ACTIONS.UPDATE_CONTACT, payload: { ...contact, atorRating: val } })}
+                                            />
                                         </td>
                                         <td onClick={e => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
                                             <button className="btn btn-ghost btn-sm" onClick={e => handleOpenEdit(contact, e)} title="Edit">
