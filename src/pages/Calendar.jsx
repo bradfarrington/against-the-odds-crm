@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { supabase } from '../lib/supabaseClient';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Users, Clock, MapPin, AlignLeft, Building2, User, Filter, RefreshCw, Video, ExternalLink, Mail } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Users, Clock, MapPin, AlignLeft, Building2, User, Filter, RefreshCw, Video, ExternalLink, Mail, Briefcase, Heart, ChevronDown, Presentation } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
 import CoachingSessionModal from '../components/CoachingSessionModal';
@@ -126,6 +126,22 @@ export default function Calendar() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalCalendars, setModalCalendars] = useState([]);
     const [newEvent, setNewEvent] = useState({ title: '', start_time: '', durationHours: 1, durationMinutes: 0, location: '', description: '', is_all_day: false, contact_id: '', recovery_seeker_id: '', staff_id: user?.id || '', graph_calendar_id: '' });
+
+    // New Event dropdown state
+    const [newEventDropdownOpen, setNewEventDropdownOpen] = useState(false);
+    const newEventDropdownRef = useRef(null);
+
+    // Close new-event dropdown on outside click
+    useEffect(() => {
+        if (!newEventDropdownOpen) return;
+        const handleClick = (e) => {
+            if (newEventDropdownRef.current && !newEventDropdownRef.current.contains(e.target)) {
+                setNewEventDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, [newEventDropdownOpen]);
 
     // Fetch calendars for the staff member selected in the modal
     const fetchModalCalendars = async (staffId) => {
@@ -1055,10 +1071,60 @@ export default function Calendar() {
                         </button>
                     )}
 
-                    <button className="btn btn-primary" onClick={() => { setIsModalOpen(true); fetchModalCalendars(user?.id); }} style={{ flexShrink: 0, width: 'auto', flex: 'none' }}>
-                        <Plus style={{ width: 16, height: 16, marginRight: 8 }} />
-                        New Event
-                    </button>
+                    <div ref={newEventDropdownRef} style={{ position: 'relative', flexShrink: 0 }}>
+                        <button className="btn btn-primary" onClick={() => setNewEventDropdownOpen(prev => !prev)} style={{ flexShrink: 0, width: 'auto', flex: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Plus style={{ width: 16, height: 16 }} />
+                            New Event
+                            <ChevronDown size={14} style={{ marginLeft: 2, transition: 'transform 0.2s', transform: newEventDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
+                        </button>
+                        {newEventDropdownOpen && (
+                            <div style={{
+                                position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+                                background: 'var(--bg-card)', border: '1px solid var(--border)',
+                                borderRadius: 'var(--radius-lg)', boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
+                                minWidth: 220, zIndex: 100, overflow: 'hidden',
+                                animation: 'fadeslide 0.15s ease-out'
+                            }}>
+                                {[
+                                    { label: 'Workshop', icon: <Presentation size={16} />, desc: 'Group training session', key: 'workshop' },
+                                    { label: 'Coaching', icon: <Heart size={16} />, desc: 'One-on-one coaching', key: 'coaching' },
+                                    { label: 'Meeting', icon: <Briefcase size={16} />, desc: 'Business meeting', key: 'meeting' },
+                                    { label: 'Personal', icon: <User size={16} />, desc: 'Personal event', key: 'personal' },
+                                ].map(item => (
+                                    <button
+                                        key={item.key}
+                                        onClick={() => {
+                                            setNewEventDropdownOpen(false);
+                                            // Placeholder — no action yet
+                                        }}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: 12,
+                                            width: '100%', padding: '12px 16px',
+                                            border: 'none', background: 'transparent',
+                                            cursor: 'pointer', textAlign: 'left',
+                                            transition: 'background 0.15s',
+                                            borderBottom: item.key !== 'personal' ? '1px solid var(--border)' : 'none',
+                                            color: 'var(--text-primary)'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                    >
+                                        <span style={{
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            width: 32, height: 32, borderRadius: 'var(--radius-md)',
+                                            background: 'var(--bg-input)', color: 'var(--primary)', flexShrink: 0
+                                        }}>
+                                            {item.icon}
+                                        </span>
+                                        <div>
+                                            <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1.3 }}>{item.label}</div>
+                                            <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.3 }}>{item.desc}</div>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
