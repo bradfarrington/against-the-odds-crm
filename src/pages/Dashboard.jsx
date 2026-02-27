@@ -40,6 +40,10 @@ const workshopStatusMap = { Scheduled: 'info', Completed: 'success', Cancelled: 
    ═══════════════════════════════════════ */
 function AdminDashboard({ state, user, navigate }) {
     const [viewMode, setViewMode] = useState('overview');
+    const [chartRange, setChartRange] = useState('6m');
+    const [recoveryChartRange, setRecoveryChartRange] = useState('6m');
+    const [financialRange, setFinancialRange] = useState('6m');
+    const [invoiceCategory, setInvoiceCategory] = useState('All');
 
     const workshops = state.preventionSchedule || [];
     const seekers = state.recoverySeekers || [];
@@ -47,20 +51,10 @@ function AdminDashboard({ state, user, navigate }) {
     const tasks = state.tasks || [];
     const staff = state.staff || [];
 
-    // Prevention KPIs
-    const scheduledWorkshops = workshops.filter(w => w.status === 'Scheduled').length;
-    const completedWorkshops = workshops.filter(w => w.status === 'Completed').length;
-    const totalAttendees = workshops.filter(w => w.status === 'Completed').reduce((s, w) => s + (w.attendeeCount || 0), 0);
+    // Prevention KPIs (computed after month range is built below)
+    const now = new Date();
 
-    // Recovery KPIs
-    const activeSeekers = seekers.filter(s => s.status === 'Active').length;
-    const completedRecovery = seekers.filter(s => s.status === 'Completed').length;
-    const totalSessions = seekers.reduce((s, sk) => s + (sk.coachingSessions?.length || 0), 0);
-
-    // Financial
-    const totalInvoiced = invoices.reduce((s, i) => s + (i.amount || 0), 0);
-    const totalPaid = invoices.filter(i => i.status === 'Paid').reduce((s, i) => s + (i.amount || 0), 0);
-    const totalOutstanding = invoices.filter(i => i.status === 'Sent' || i.status === 'Overdue').reduce((s, i) => s + (i.amount || 0), 0);
+    // Recovery KPIs (computed after month ranges are built below)
 
     // Tasks Overview
     const openTasks = tasks.filter(t => t.status !== 'Done').length;
@@ -68,34 +62,105 @@ function AdminDashboard({ state, user, navigate }) {
 
     // Chart data — derived from actual DB records
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const buildMonthRange = () => {
-        const now = new Date();
+    const buildMonthRange = (range) => {
+        const n = new Date();
         const months = [];
-        for (let i = 5; i >= 0; i--) {
-            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-            months.push({ year: d.getFullYear(), month: d.getMonth(), label: monthNames[d.getMonth()] });
+        if (range === '1m') {
+            const start = new Date(n.getFullYear(), n.getMonth(), 1);
+            months.push({ year: n.getFullYear(), month: n.getMonth(), label: `1 ${monthNames[n.getMonth()]}`, from: start, to: start });
+            months.push({ year: n.getFullYear(), month: n.getMonth(), label: `${n.getDate()} ${monthNames[n.getMonth()]}`, from: start, to: n });
+        } else if (range === '6m') {
+            for (let i = 5; i >= 0; i--) {
+                const d = new Date(n.getFullYear(), n.getMonth() - i, 1);
+                months.push({ year: d.getFullYear(), month: d.getMonth(), label: monthNames[d.getMonth()] });
+            }
+        } else if (range === 'next-6m') {
+            for (let i = 0; i <= 5; i++) {
+                const d = new Date(n.getFullYear(), n.getMonth() + i, 1);
+                months.push({ year: d.getFullYear(), month: d.getMonth(), label: monthNames[d.getMonth()] });
+            }
+        } else if (range === 'this-year') {
+            for (let m = 0; m <= 11; m++) {
+                months.push({ year: n.getFullYear(), month: m, label: monthNames[m] });
+            }
+        } else if (range === 'last-year') {
+            for (let m = 0; m <= 11; m++) {
+                months.push({ year: n.getFullYear() - 1, month: m, label: monthNames[m] });
+            }
         }
         return months;
     };
-    const monthRange = buildMonthRange();
+    const preventionMonthRange = buildMonthRange(chartRange);
+    const recoveryMonthRange = buildMonthRange(recoveryChartRange);
 
-    const workshopChartData = monthRange.map(({ year, month, label }) => {
-        const inMonth = workshops.filter(w => {
-            const d = new Date(w.date);
-            return d.getFullYear() === year && d.getMonth() === month;
+    // Helper: check if a date falls within any month in a range
+    const inRange = (dateStr, range) => {
+        if (!dateStr) return false;
+        const d = new Date(dateStr);
+        return range.some(({ year, month }) => d.getFullYear() === year && d.getMonth() === month);
+    };
+
+    // Financial — filtered by range + category
+    const financialMonthRange = buildMonthRange(financialRange);
+    const filteredWorkshops = workshops.filter(w => inRange(w.created_at || w.createdAt, financialMonthRange));
+    const forecastedRevenue = filteredWorkshops.reduce((s, w) => s + (parseFloat(w.value) || 0), 0);
+
+    const filteredInvoices = invoices
+        .filter(i => invoiceCategory === 'All' || i.category === invoiceCategory)
+        .filter(i => inRange(i.dateIssued || i.created_at || i.createdAt, financialMonthRange));
+    const totalInvoiced = filteredInvoices.reduce((s, i) => s + (i.amount || 0), 0);
+    const totalPaid = filteredInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + (i.amount || 0), 0);
+    const totalOutstanding = filteredInvoices.filter(i => i.status === 'Sent' || i.status === 'Overdue').reduce((s, i) => s + (i.amount || 0), 0);
+
+    // Prevention KPIs — filtered by selected chart range
+    const scheduledWorkshops = workshops.filter(w => w.date && w.endTime && new Date(w.date) > now && inRange(w.date, preventionMonthRange)).length;
+    const completedWorkshops = workshops.filter(w => w.endTime && new Date(w.endTime) < now && inRange(w.endTime, preventionMonthRange)).length;
+    const totalAttendees = workshops.filter(w => w.endTime && new Date(w.endTime) < now && inRange(w.endTime, preventionMonthRange)).reduce((s, w) => s + (w.attendeeCount || 0), 0);
+
+    const workshopChartData = preventionMonthRange.map((entry) => {
+        const { year, month, label } = entry;
+        const useDateRange = !!entry.from;
+        const completedInMonth = workshops.filter(w => {
+            if (!w.endTime) return false;
+            const end = new Date(w.endTime);
+            if (useDateRange) return end >= entry.from && end <= entry.to;
+            return end < now && end.getFullYear() === year && end.getMonth() === month;
+        });
+        const scheduledInMonth = workshops.filter(w => {
+            if (!w.date || !w.endTime) return false;
+            const start = new Date(w.date);
+            if (useDateRange) return start >= entry.from && start <= entry.to;
+            return start > now && start.getFullYear() === year && start.getMonth() === month;
         });
         return {
             month: label,
-            completed: inMonth.filter(w => w.status === 'Completed').length,
-            scheduled: inMonth.filter(w => w.status === 'Scheduled').length,
+            completed: completedInMonth.length,
+            scheduled: scheduledInMonth.length,
         };
     });
 
-    const recoveryChartData = monthRange.map(({ year, month, label }) => {
-        // Count seekers that existed by end of this month (created on or before last day of month)
-        const endOfMonth = new Date(year, month + 1, 0);
-        const count = seekers.filter(s => new Date(s.created_at || s.createdAt) <= endOfMonth).length;
-        return { month: label, seekers: count };
+    // Recovery KPIs — filtered by selected recovery chart range
+    // Seekers use pipeline stage names as status, not 'Active'/'Completed'
+    const activeSeekers = seekers.filter(s => inRange(s.created_at || s.createdAt, recoveryMonthRange)).length;
+    const completedRecovery = seekers.filter(s => inRange(s.created_at || s.createdAt, recoveryMonthRange)).reduce((sum, s) => sum + (s.coachingSessions?.length || 0) > 0 ? sum + 1 : sum, 0);
+    const allSessions = seekers.flatMap(sk => (sk.coachingSessions || []));
+    const totalSessions = allSessions.filter(cs => inRange(cs.date, recoveryMonthRange)).length;
+
+    const recoveryChartData = recoveryMonthRange.map((entry) => {
+        const { year, month, label } = entry;
+        const useDateRange = !!entry.from;
+        const sessionsInMonth = allSessions.filter(cs => {
+            if (!cs.date) return false;
+            const d = new Date(cs.date);
+            if (useDateRange) return d >= entry.from && d <= entry.to;
+            return d.getFullYear() === year && d.getMonth() === month;
+        }).length;
+        const seekersInMonth = seekers.filter(s => {
+            const d = new Date(s.created_at || s.createdAt);
+            if (useDateRange) return d >= entry.from && d <= entry.to;
+            return d.getFullYear() === year && d.getMonth() === month;
+        }).length;
+        return { month: label, seekers: seekersInMonth, sessions: sessionsInMonth };
     });
 
     return (
@@ -149,15 +214,20 @@ function AdminDashboard({ state, user, navigate }) {
                                         <div className="mini-stat-label">People Reached</div>
                                     </div>
                                 </div>
+                                <div style={{ display: 'flex', gap: 2, marginBottom: 'var(--space-md)', justifyContent: 'center' }}>
+                                    {[{ key: '1m', label: 'This Month' }, { key: '6m', label: 'Last 6M' }, { key: 'next-6m', label: 'Next 6M' }, { key: 'this-year', label: 'This Year' }, { key: 'last-year', label: 'Last Year' }].map(opt => (
+                                        <button key={opt.key} type="button" onClick={() => setChartRange(opt.key)} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer', background: chartRange === opt.key ? 'var(--primary)' : 'var(--bg-secondary)', color: chartRange === opt.key ? '#fff' : 'var(--text-muted)', transition: 'all 0.15s ease' }}>{opt.label}</button>
+                                    ))}
+                                </div>
                                 <div style={{ height: 180 }}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={workshopChartData}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                                             <XAxis dataKey="month" stroke="var(--text-muted)" fontSize={12} />
-                                            <YAxis stroke="var(--text-muted)" fontSize={12} />
+                                            <YAxis stroke="var(--text-muted)" fontSize={12} allowDecimals={false} />
                                             <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, color: 'var(--text-primary)' }} />
-                                            <Bar dataKey="completed" fill="var(--success)" radius={[4, 4, 0, 0]} name="Completed" />
                                             <Bar dataKey="scheduled" fill="var(--info)" radius={[4, 4, 0, 0]} name="Scheduled" />
+                                            <Bar dataKey="completed" fill="var(--success)" radius={[4, 4, 0, 0]} name="Completed" />
                                         </BarChart>
                                     </ResponsiveContainer>
                                 </div>
@@ -187,20 +257,26 @@ function AdminDashboard({ state, user, navigate }) {
                                         <div className="mini-stat-label">Sessions</div>
                                     </div>
                                 </div>
+                                <div style={{ display: 'flex', gap: 2, marginBottom: 'var(--space-md)', justifyContent: 'center' }}>
+                                    {[{ key: '1m', label: 'This Month' }, { key: '6m', label: 'Last 6M' }, { key: 'next-6m', label: 'Next 6M' }, { key: 'this-year', label: 'This Year' }, { key: 'last-year', label: 'Last Year' }].map(opt => (
+                                        <button key={opt.key} type="button" onClick={() => setRecoveryChartRange(opt.key)} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer', background: recoveryChartRange === opt.key ? 'var(--success)' : 'var(--bg-secondary)', color: recoveryChartRange === opt.key ? '#fff' : 'var(--text-muted)', transition: 'all 0.15s ease' }}>{opt.label}</button>
+                                    ))}
+                                </div>
                                 <div style={{ height: 180 }}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <AreaChart data={recoveryChartData}>
                                             <defs>
-                                                <linearGradient id="seekerGrad" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="0%" stopColor="var(--success)" stopOpacity={0.3} />
+                                                <linearGradient id="activeGrad" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="0%" stopColor="var(--success)" stopOpacity={0.15} />
                                                     <stop offset="100%" stopColor="var(--success)" stopOpacity={0} />
                                                 </linearGradient>
                                             </defs>
                                             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                                             <XAxis dataKey="month" stroke="var(--text-muted)" fontSize={12} />
-                                            <YAxis stroke="var(--text-muted)" fontSize={12} />
+                                            <YAxis stroke="var(--text-muted)" fontSize={12} allowDecimals={false} />
                                             <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, color: 'var(--text-primary)' }} />
-                                            <Area type="monotone" dataKey="seekers" stroke="var(--success)" strokeWidth={2} fill="url(#seekerGrad)" name="Seekers" />
+                                            <Area type="monotone" dataKey="seekers" stroke="var(--success)" strokeWidth={2} fill="url(#activeGrad)" name="New Seekers" />
+                                            <Area type="monotone" dataKey="sessions" stroke="var(--info)" strokeWidth={2} fill="none" name="Sessions" />
                                         </AreaChart>
                                     </ResponsiveContainer>
                                 </div>
@@ -209,11 +285,30 @@ function AdminDashboard({ state, user, navigate }) {
                     </div>
 
                     {/* Financial Overview */}
-                    <div className="stats-grid" style={{ marginBottom: 'var(--space-xl)' }}>
-                        <StatCard icon={<Receipt />} value={`£${totalInvoiced.toLocaleString()}`} label="Total Invoiced" accent="var(--primary)" className="stagger-1" />
-                        <StatCard icon={<TrendingUp />} value={`£${totalPaid.toLocaleString()}`} label="Paid" accent="var(--success)" className="stagger-2" />
-                        <StatCard icon={<Clock />} value={`£${totalOutstanding.toLocaleString()}`} label="Outstanding" accent="var(--warning)" className="stagger-3" />
-                        <StatCard icon={<CheckSquare />} value={openTasks} label={`Open Tasks (${urgentTasks} urgent)`} accent="var(--info)" className="stagger-4" />
+                    <div style={{ marginBottom: 'var(--space-xl)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-md)', flexWrap: 'wrap', gap: 'var(--space-sm)' }}>
+                            <div style={{ display: 'flex', gap: 2 }}>
+                                {[{ key: '1m', label: 'This Month' }, { key: '6m', label: 'Last 6M' }, { key: 'next-6m', label: 'Next 6M' }, { key: 'this-year', label: 'This Year' }, { key: 'last-year', label: 'Last Year' }].map(opt => (
+                                    <button key={opt.key} type="button" onClick={() => setFinancialRange(opt.key)} style={{ padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer', background: financialRange === opt.key ? 'var(--primary)' : 'var(--bg-secondary)', color: financialRange === opt.key ? '#fff' : 'var(--text-muted)', transition: 'all 0.15s ease' }}>{opt.label}</button>
+                                ))}
+                            </div>
+                            <select
+                                value={invoiceCategory}
+                                onChange={e => setInvoiceCategory(e.target.value)}
+                                style={{ padding: '4px 24px 4px 10px', fontSize: 12, fontWeight: 500, borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', cursor: 'pointer', appearance: 'none', backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%238B8FA3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+                            >
+                                <option value="All">All Invoices</option>
+                                <option value="Prevention">Prevention</option>
+                                <option value="Recovery">Recovery</option>
+                            </select>
+                        </div>
+                        <div className="stats-grid-5">
+                            <StatCard icon={<Target />} value={`£${forecastedRevenue.toLocaleString()}`} label="Forecasted Revenue" accent="var(--primary)" className="stagger-1" />
+                            <StatCard icon={<Receipt />} value={`£${totalInvoiced.toLocaleString()}`} label="Total Invoiced" accent="var(--info)" className="stagger-2" />
+                            <StatCard icon={<TrendingUp />} value={`£${totalPaid.toLocaleString()}`} label="Paid" accent="var(--success)" className="stagger-3" />
+                            <StatCard icon={<Clock />} value={`£${totalOutstanding.toLocaleString()}`} label="Outstanding" accent="var(--warning)" className="stagger-4" />
+                            <StatCard icon={<CheckSquare />} value={openTasks} label={`Open Tasks (${urgentTasks} urgent)`} accent="var(--info)" className="stagger-5" />
+                        </div>
                     </div>
 
                     {/* Staff Overview & Overdue Tasks */}

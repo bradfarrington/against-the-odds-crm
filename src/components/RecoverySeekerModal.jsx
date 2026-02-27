@@ -43,7 +43,7 @@ export default function RecoverySeekerModal({ isOpen, onClose, item = null, pipe
         if (item) {
             dispatch({ type: ACTIONS.UPDATE_SEEKER, payload: { id: item.id, ...form } });
         } else {
-            const data = { ...form };
+            const data = { ...form, created_at: new Date().toISOString() };
             if (!data.status) data.status = defaultStatus;
             if (pipelineId) data.pipelineId = pipelineId;
             dispatch({ type: ACTIONS.ADD_SEEKER, payload: data });

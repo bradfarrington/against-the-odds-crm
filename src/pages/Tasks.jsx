@@ -3,6 +3,7 @@ import { useData } from '../context/DataContext';
 import { Plus, Search, CheckCircle2, Circle, Clock, AlertTriangle, X, LayoutList, Columns3, Settings, Edit3, Trash2 } from 'lucide-react';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
+import DateTimePicker from '../components/DateTimePicker';
 
 const statusMap = { 'To Do': 'neutral', 'In Progress': 'info', Done: 'success' };
 const priorityMap = { Low: 'neutral', Medium: 'info', High: 'warning', Urgent: 'danger' };
@@ -16,6 +17,7 @@ export default function Tasks() {
     const [viewMode, setViewMode] = useState('kanban');
     const [showModal, setShowModal] = useState(false);
     const [editItem, setEditItem] = useState(null);
+    const [dueDate, setDueDate] = useState('');
     const [draggedTask, setDraggedTask] = useState(null);
     const [dragOverColumn, setDragOverColumn] = useState(null);
 
@@ -183,7 +185,7 @@ export default function Tasks() {
                             <Settings style={{ width: 16, height: 16 }} />
                         </button>
                     )}
-                    <button className="btn btn-primary" onClick={() => { setEditItem(null); setShowModal(true); }}>
+                    <button className="btn btn-primary" onClick={() => { setEditItem(null); setDueDate(''); setShowModal(true); }}>
                         <Plus /> Add Task
                     </button>
                 </div>
@@ -209,7 +211,7 @@ export default function Tasks() {
                                 </thead>
                                 <tbody>
                                     {sortByPriority([...tasks]).map(t => (
-                                        <tr key={t.id} onClick={() => { setEditItem(t); setShowModal(true); }} style={isOverdue(t) ? { borderLeft: '3px solid var(--danger)' } : {}}>
+                                        <tr key={t.id} onClick={() => { setEditItem(t); setDueDate(t.dueDate || ''); setShowModal(true); }} style={isOverdue(t) ? { borderLeft: '3px solid var(--danger)' } : {}}>
                                             <td onClick={e => toggleStatus(t, e)} style={{ cursor: 'pointer', textAlign: 'center' }}>
                                                 {t.status === 'Done' ? <CheckCircle2 style={{ width: 18, height: 18, color: 'var(--success)' }} /> : t.status === 'In Progress' ? <Clock style={{ width: 18, height: 18, color: 'var(--info)' }} /> : <Circle style={{ width: 18, height: 18, color: 'var(--text-muted)' }} />}
                                             </td>
@@ -258,7 +260,7 @@ export default function Tasks() {
                                                     draggable
                                                     onDragStart={(e) => handleDragStart(e, t)}
                                                     onDragEnd={handleDragEnd}
-                                                    onClick={() => { setEditItem(t); setShowModal(true); }}
+                                                    onClick={() => { setEditItem(t); setDueDate(t.dueDate || ''); setShowModal(true); }}
                                                 >
                                                     <div className="kanban-card-main">
                                                         <div className="kanban-card-title-row">
@@ -312,7 +314,7 @@ export default function Tasks() {
                                                 draggable
                                                 onDragStart={(e) => handleDragStart(e, t)}
                                                 onDragEnd={handleDragEnd}
-                                                onClick={() => { setEditItem(t); setShowModal(true); }}
+                                                onClick={() => { setEditItem(t); setDueDate(t.dueDate || ''); setShowModal(true); }}
                                             >
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                                                     <span className="kanban-card-title">{t.title}</span>
@@ -346,7 +348,7 @@ export default function Tasks() {
                                             <span className="kanban-count">{colTasks.length}</span>
                                         </div>
                                         {colTasks.map(t => (
-                                            <div key={t.id} className="kanban-mobile-card" onClick={() => { setEditItem(t); setShowModal(true); }}>
+                                            <div key={t.id} className="kanban-mobile-card" onClick={() => { setEditItem(t); setDueDate(t.dueDate || ''); setShowModal(true); }}>
                                                 <div className="kanban-card-title-row">
                                                     <span style={{ fontWeight: 600, fontSize: 14, flex: 1, textDecoration: t.status === 'Done' ? 'line-through' : 'none', opacity: t.status === 'Done' ? 0.6 : 1 }}>{t.title}</span>
                                                     <button
@@ -380,7 +382,7 @@ export default function Tasks() {
             </div>
 
             {/* Add/Edit Task Modal */}
-            <Modal isOpen={showModal} onClose={() => { setShowModal(false); setEditItem(null); }} title={editItem ? 'Edit Task' : 'Add Task'}>
+            <Modal isOpen={showModal} onClose={() => { setShowModal(false); setEditItem(null); setDueDate(''); }} title={editItem ? 'Edit Task' : 'Add Task'}>
                 <form onSubmit={handleSave}>
                     <div className="modal-body">
                         <div className="form-group">
@@ -409,9 +411,9 @@ export default function Tasks() {
                                     {uniqueCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                                 </select>
                             </div>
-                            <div className="form-group">
+                            <div className="form-group" style={{ overflow: 'visible' }}>
                                 <label className="form-label">Due Date</label>
-                                <input className="form-input" name="dueDate" type="date" defaultValue={editItem?.dueDate} />
+                                <DateTimePicker name="dueDate" mode="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} dropdownAlign="right" />
                             </div>
                         </div>
                         <div className="form-row">
