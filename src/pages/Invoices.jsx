@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
-import { Plus, Search, Receipt, X, Settings2, FileDown, Send, Eye, Trash2 } from 'lucide-react';
+import { Plus, Search, Receipt, X, Settings2, FileDown, Send, Eye, Trash2, Mail } from 'lucide-react';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import DateTimePicker from '../components/DateTimePicker';
@@ -24,6 +24,7 @@ export default function Invoices({ category }) {
     const [lineItems, setLineItems] = useState([]);
     const [previewInvoice, setPreviewInvoice] = useState(null);
     const [sending, setSending] = useState(null);
+    const [confirmSend, setConfirmSend] = useState(null);
     const [modalCompanyId, setModalCompanyId] = useState('');
     const [modalContactId, setModalContactId] = useState('');
     const [modalInvoiceNumber, setModalInvoiceNumber] = useState('');
@@ -255,7 +256,13 @@ export default function Invoices({ category }) {
             return;
         }
 
-        if (!confirm(`Send invoice ${inv.invoiceNumber} to ${recipientEmail}?`)) return;
+        // Show custom confirmation dialog
+        setConfirmSend({ invoice: inv, recipientEmail, contact, company });
+    };
+
+    const handleConfirmedSend = async () => {
+        const { invoice: inv, recipientEmail } = confirmSend;
+        setConfirmSend(null);
 
         setSending(inv.id);
         try {
@@ -660,6 +667,54 @@ export default function Invoices({ category }) {
                     </Modal>
                 );
             })()}
+
+            {/* Custom Send Email Confirmation Dialog */}
+            {confirmSend && (
+                <div className="modal-overlay" onClick={() => setConfirmSend(null)} style={{ zIndex: 1100 }}>
+                    <div
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                            background: 'var(--bg-card)',
+                            borderRadius: 'var(--radius-lg)',
+                            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+                            padding: 'var(--space-xl)',
+                            maxWidth: 400,
+                            width: '90%',
+                            textAlign: 'center',
+                            animation: 'modalIn 0.2s ease',
+                        }}
+                    >
+                        <div style={{
+                            width: 48, height: 48, borderRadius: '50%',
+                            background: 'rgba(99, 102, 241, 0.1)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            margin: '0 auto var(--space-md)',
+                        }}>
+                            <Mail size={24} style={{ color: 'var(--primary)' }} />
+                        </div>
+                        <h3 style={{ margin: '0 0 var(--space-sm)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>Send Email?</h3>
+                        <p style={{ margin: '0 0 var(--space-lg)', color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.5 }}>
+                            Invoice <strong>{confirmSend.invoice.invoiceNumber}</strong> will be sent to <strong>{confirmSend.recipientEmail}</strong>
+                        </p>
+                        <div style={{ display: 'flex', gap: 'var(--space-sm)', justifyContent: 'center' }}>
+                            <button
+                                className="btn btn-primary"
+                                onClick={() => handleConfirmedSend()}
+                                style={{ padding: '8px 28px', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            >
+                                Yes
+                            </button>
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => setConfirmSend(null)}
+                                style={{ padding: '8px 28px', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            >
+                                No
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 }

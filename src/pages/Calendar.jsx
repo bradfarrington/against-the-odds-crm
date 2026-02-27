@@ -1071,7 +1071,7 @@ export default function Calendar() {
                         </button>
                     )}
 
-                    <div ref={newEventDropdownRef} style={{ position: 'relative', flexShrink: 0 }}>
+                    <div ref={newEventDropdownRef} style={{ position: 'relative', flexShrink: 0, zIndex: 200 }}>
                         <button className="btn btn-primary" onClick={() => setNewEventDropdownOpen(prev => !prev)} style={{ flexShrink: 0, width: 'auto', flex: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Plus style={{ width: 16, height: 16 }} />
                             New Event
@@ -1095,7 +1095,14 @@ export default function Calendar() {
                                         key={item.key}
                                         onClick={() => {
                                             setNewEventDropdownOpen(false);
-                                            // Placeholder — no action yet
+                                            if (item.key === 'workshop') {
+                                                navigate('/workshop-tracker');
+                                            } else if (item.key === 'coaching') {
+                                                navigate('/treatment-tracker');
+                                            } else if (item.key === 'meeting' || item.key === 'personal') {
+                                                fetchModalCalendars(user?.id);
+                                                setIsModalOpen(true);
+                                            }
                                         }}
                                         style={{
                                             display: 'flex', alignItems: 'center', gap: 12,

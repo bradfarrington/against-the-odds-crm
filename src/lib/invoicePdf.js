@@ -45,7 +45,7 @@ export function generateInvoicePdf({ template = {}, invoice, lineItems = [], com
         return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     };
 
-    const fmtCurrency = (n) => `£${(n || 0).toFixed(2)}`;
+    const fmtCurrency = (n) => `£${(parseFloat(n) || 0).toFixed(2)}`;
 
     // ─── Logo + Company header ───
     // Logo is skipped in PDF (base64 image embedding is complex and flaky in jsPDF)
