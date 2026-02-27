@@ -405,23 +405,10 @@ export const seedTemplates = [
 ];
 
 /* ===== PREVENTION RESOURCES ===== */
-export const seedPreventionResources = [
-  { id: uuid(), name: 'Gambling Awareness Slide Deck', workshopType: 'Awareness', fileType: 'Presentation', description: 'Main slide deck used for introductory gambling awareness sessions. Covers stats, warning signs, and signposting.', uploadedAt: '2025-10-01T10:00:00Z', size: '4.2 MB' },
-  { id: uuid(), name: 'Online Safety Handout', workshopType: 'Prevention', fileType: 'PDF', description: 'Printed handout for students covering online gambling risks, loot boxes, and social media advertising.', uploadedAt: '2025-11-15T09:00:00Z', size: '1.1 MB' },
-  { id: uuid(), name: 'Workshop Feedback Form', workshopType: 'Awareness', fileType: 'Form', description: 'Post-workshop evaluation form for attendees to provide feedback and measure impact.', uploadedAt: '2025-09-20T14:00:00Z', size: '320 KB' },
-  { id: uuid(), name: 'Know the Risks Activity Pack', workshopType: 'Awareness', fileType: 'PDF', description: 'Interactive activity pack with group exercises, quizzes, and discussion prompts for ages 14-18.', uploadedAt: '2026-01-05T11:00:00Z', size: '2.8 MB' },
-  { id: uuid(), name: 'Staff Training Guide', workshopType: 'Training', fileType: 'PDF', description: 'Training manual for staff and volunteers delivering prevention workshops. Includes facilitation tips and safeguarding protocols.', uploadedAt: '2025-09-01T10:00:00Z', size: '3.5 MB' },
-  { id: uuid(), name: 'Community Awareness Poster', workshopType: 'Awareness', fileType: 'Image', description: 'Printable A3 poster for community venues with QR code linking to support services.', uploadedAt: '2026-02-01T10:00:00Z', size: '8.7 MB' },
-];
+export const seedPreventionResources = [];
 
 /* ===== RECOVERY RESOURCES ===== */
-export const seedRecoveryResources = [
-  { id: uuid(), name: 'Recovery Coaching Session Plan', category: 'Coaching', fileType: 'PDF', description: 'Structured session plan template for 1-to-1 recovery coaching meetings.', uploadedAt: '2025-09-15T10:00:00Z', size: '890 KB' },
-  { id: uuid(), name: 'Self-Assessment Questionnaire', category: 'Assessment', fileType: 'Form', description: 'Initial self-assessment form for new recovery seekers. Covers gambling history, triggers, and goals.', uploadedAt: '2025-09-15T10:00:00Z', size: '420 KB' },
-  { id: uuid(), name: 'Peer Mentor Handbook', category: 'Training', fileType: 'PDF', description: 'Handbook for trained peer mentors covering mentoring techniques, boundaries, and escalation procedures.', uploadedAt: '2025-12-01T10:00:00Z', size: '2.3 MB' },
-  { id: uuid(), name: 'Recovery Progress Template', category: 'Tracking', fileType: 'Spreadsheet', description: 'Weekly progress tracking template for coaches to record seeker milestones and session notes.', uploadedAt: '2026-01-10T09:00:00Z', size: '560 KB' },
-  { id: uuid(), name: 'Signposting Directory', category: 'Reference', fileType: 'PDF', description: 'Directory of external support services including GamCare, NHS, Samaritans, and local support groups.', uploadedAt: '2025-10-01T10:00:00Z', size: '1.2 MB' },
-];
+export const seedRecoveryResources = [];
 
 export function getInitialData() {
   const stored = localStorage.getItem('ato-crm-data');

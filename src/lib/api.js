@@ -372,6 +372,18 @@ export const createRecoveryResource = (d) => insertRow('recovery_resources', d);
 export const modifyRecoveryResource = (id, d) => updateRow('recovery_resources', id, d);
 export const removeRecoveryResource = (id) => deleteRow('recovery_resources', id);
 
+// Prevention Resource Categories
+export const fetchPreventionResourceCategories = () => fetchAll('prevention_resource_categories', 'sort_order');
+export const createPreventionResourceCategory = (d) => insertRow('prevention_resource_categories', d);
+export const modifyPreventionResourceCategory = (id, d) => updateRow('prevention_resource_categories', id, d);
+export const removePreventionResourceCategory = (id) => deleteRow('prevention_resource_categories', id);
+
+// Recovery Resource Categories
+export const fetchRecoveryResourceCategories = () => fetchAll('recovery_resource_categories', 'sort_order');
+export const createRecoveryResourceCategory = (d) => insertRow('recovery_resource_categories', d);
+export const modifyRecoveryResourceCategory = (id, d) => updateRow('recovery_resource_categories', id, d);
+export const removeRecoveryResourceCategory = (id) => deleteRow('recovery_resource_categories', id);
+
 // Task Categories
 export const fetchTaskCategories = () => fetchAll('task_categories', 'sort_order');
 export const createTaskCategory = (d) => insertRow('task_categories', d);

@@ -113,6 +113,14 @@ const ACTIONS = {
     ADD_REFERRAL_SOURCE: 'ADD_REFERRAL_SOURCE',
     UPDATE_REFERRAL_SOURCE: 'UPDATE_REFERRAL_SOURCE',
     DELETE_REFERRAL_SOURCE: 'DELETE_REFERRAL_SOURCE',
+    // Prevention Resource Categories
+    ADD_PREVENTION_RESOURCE_CATEGORY: 'ADD_PREVENTION_RESOURCE_CATEGORY',
+    UPDATE_PREVENTION_RESOURCE_CATEGORY: 'UPDATE_PREVENTION_RESOURCE_CATEGORY',
+    DELETE_PREVENTION_RESOURCE_CATEGORY: 'DELETE_PREVENTION_RESOURCE_CATEGORY',
+    // Recovery Resource Categories
+    ADD_RECOVERY_RESOURCE_CATEGORY: 'ADD_RECOVERY_RESOURCE_CATEGORY',
+    UPDATE_RECOVERY_RESOURCE_CATEGORY: 'UPDATE_RECOVERY_RESOURCE_CATEGORY',
+    DELETE_RECOVERY_RESOURCE_CATEGORY: 'DELETE_RECOVERY_RESOURCE_CATEGORY',
     // Invoice Template
     SET_INVOICE_TEMPLATE: 'SET_INVOICE_TEMPLATE',
 };
@@ -145,6 +153,8 @@ const emptyState = {
     workshopTypes: [],
     workshopNames: [],
     referralSources: [],
+    preventionResourceCategories: [],
+    recoveryResourceCategories: [],
     invoiceTemplate: null,
 };
 
@@ -353,6 +363,16 @@ function dataReducer(state, action) {
         case ACTIONS.UPDATE_REFERRAL_SOURCE: return crudLocal(state, 'referralSources', { crud: 'UPDATE', payload: action.payload });
         case ACTIONS.DELETE_REFERRAL_SOURCE: return crudLocal(state, 'referralSources', { crud: 'DELETE', payload: action.payload });
 
+        // Prevention Resource Categories
+        case ACTIONS.ADD_PREVENTION_RESOURCE_CATEGORY: return crudLocal(state, 'preventionResourceCategories', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_PREVENTION_RESOURCE_CATEGORY: return crudLocal(state, 'preventionResourceCategories', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_PREVENTION_RESOURCE_CATEGORY: return crudLocal(state, 'preventionResourceCategories', { crud: 'DELETE', payload: action.payload });
+
+        // Recovery Resource Categories
+        case ACTIONS.ADD_RECOVERY_RESOURCE_CATEGORY: return crudLocal(state, 'recoveryResourceCategories', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_RECOVERY_RESOURCE_CATEGORY: return crudLocal(state, 'recoveryResourceCategories', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_RECOVERY_RESOURCE_CATEGORY: return crudLocal(state, 'recoveryResourceCategories', { crud: 'DELETE', payload: action.payload });
+
         // Invoice Template
         case ACTIONS.SET_INVOICE_TEMPLATE: return { ...state, invoiceTemplate: action.payload };
 
@@ -491,6 +511,13 @@ const apiMap = {
     [ACTIONS.ADD_REFERRAL_SOURCE]: (p) => api.createReferralSource(p),
     [ACTIONS.UPDATE_REFERRAL_SOURCE]: (p) => api.modifyReferralSource(p.id, p),
     [ACTIONS.DELETE_REFERRAL_SOURCE]: (p) => api.removeReferralSource(p),
+
+    [ACTIONS.ADD_PREVENTION_RESOURCE_CATEGORY]: (p) => api.createPreventionResourceCategory(p),
+    [ACTIONS.UPDATE_PREVENTION_RESOURCE_CATEGORY]: (p) => api.modifyPreventionResourceCategory(p.id, p),
+    [ACTIONS.DELETE_PREVENTION_RESOURCE_CATEGORY]: (p) => api.removePreventionResourceCategory(p),
+    [ACTIONS.ADD_RECOVERY_RESOURCE_CATEGORY]: (p) => api.createRecoveryResourceCategory(p),
+    [ACTIONS.UPDATE_RECOVERY_RESOURCE_CATEGORY]: (p) => api.modifyRecoveryResourceCategory(p.id, p),
+    [ACTIONS.DELETE_RECOVERY_RESOURCE_CATEGORY]: (p) => api.removeRecoveryResourceCategory(p),
 };
 
 // ─── Provider ──────────────────────────────────────────────────
@@ -516,7 +543,8 @@ export function DataProvider({ children }) {
                 invoices, targets, templates, preventionResources, recoveryResources,
                 taskCategories, surveys, workshopStages, pipelines,
                 companyTypes, companyIndustries, companyStatuses,
-                workshopTypes, workshopNames, referralSources, invoiceTemplate,
+                workshopTypes, workshopNames, referralSources,
+                preventionResourceCategories, recoveryResourceCategories, invoiceTemplate,
             ] = await Promise.all([
                 api.fetchCompanies(),
                 api.fetchContacts(),
@@ -543,6 +571,8 @@ export function DataProvider({ children }) {
                 api.fetchWorkshopTypes(),
                 api.fetchWorkshopNames(),
                 api.fetchReferralSources(),
+                api.fetchPreventionResourceCategories().catch(() => []),
+                api.fetchRecoveryResourceCategories().catch(() => []),
                 api.fetchInvoiceTemplate(),
             ]);
             rawDispatch({
@@ -553,7 +583,8 @@ export function DataProvider({ children }) {
                     invoices, targets, templates, preventionResources, recoveryResources,
                     taskCategories, surveys, workshopStages, pipelines,
                     companyTypes, companyIndustries, companyStatuses,
-                    workshopTypes, workshopNames, referralSources, invoiceTemplate,
+                    workshopTypes, workshopNames, referralSources,
+                    preventionResourceCategories, recoveryResourceCategories, invoiceTemplate,
                 },
             });
         } catch (err) {
