@@ -6,37 +6,9 @@ import * as api from '../lib/api';
 import Modal from '../components/Modal';
 import { supabase } from '../lib/supabaseClient';
 import WorkshopModal from '../components/WorkshopModal';
+import ColorSwatchPicker from '../components/ColorSwatchPicker';
 
 // Stages are now loaded dynamically from DataContext
-
-const PRESET_COLORS = [
-    '#ef4444', '#f97316', '#f59e0b', '#eab308',
-    '#84cc16', '#22c55e', '#14b8a6', '#06b6d4',
-    '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6',
-    '#a855f7', '#d946ef', '#ec4899', '#64748b',
-];
-
-function ColorSwatchPicker({ value, onChange }) {
-    return (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {PRESET_COLORS.map(c => (
-                <button
-                    key={c}
-                    type="button"
-                    onClick={() => onChange(c)}
-                    style={{
-                        width: 24, height: 24, borderRadius: '50%', background: c,
-                        border: value === c ? '3px solid var(--text-primary)' : '2px solid var(--border)',
-                        cursor: 'pointer', padding: 0, outline: 'none',
-                        boxShadow: value === c ? '0 0 0 2px var(--bg-primary)' : 'none',
-                        transition: 'transform 0.1s, border-color 0.15s',
-                        transform: value === c ? 'scale(1.15)' : 'scale(1)',
-                    }}
-                />
-            ))}
-        </div>
-    );
-}
 
 export default function WorkshopTracker() {
     const navigate = useNavigate();
@@ -440,7 +412,7 @@ export default function WorkshopTracker() {
                 width={520}
             >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-                    <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>Drag stages to reorder. Changes are saved automatically.</p>
+                    <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, paddingLeft: 'var(--space-sm)' }}>Drag stages to reorder. Changes are saved automatically.</p>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {workshopStages.map((stage) => (

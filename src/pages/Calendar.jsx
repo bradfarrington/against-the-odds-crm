@@ -8,6 +8,7 @@ import Modal from '../components/Modal';
 import CoachingSessionModal from '../components/CoachingSessionModal';
 import WorkshopModal from '../components/WorkshopModal';
 import DateTimePicker from '../components/DateTimePicker';
+import ColorSwatchPicker from '../components/ColorSwatchPicker';
 
 // Staff color palette for All Members view
 const STAFF_COLORS = [
@@ -59,20 +60,24 @@ export default function Calendar() {
     // Staff member filter state (for All Members view)
     const [enabledStaff, setEnabledStaff] = useState(new Set());
 
-    // Staff color overrides (persisted in localStorage)
-    const [staffColorOverrides, setStaffColorOverrides] = useState(() => {
-        try {
-            return JSON.parse(localStorage.getItem('staffColorOverrides') || '{}');
-        } catch { return {}; }
-    });
+    // Staff color overrides (persisted per-user in Supabase)
+    const [staffColorOverrides, setStaffColorOverrides] = useState({});
     const [colorPickerStaffId, setColorPickerStaffId] = useState(null);
     const [colorPickerCalId, setColorPickerCalId] = useState(null);
     const colorPickerRef = useRef(null);
 
-    // Persist color overrides
+    // Load staff color preferences from Supabase on mount
     useEffect(() => {
-        localStorage.setItem('staffColorOverrides', JSON.stringify(staffColorOverrides));
-    }, [staffColorOverrides]);
+        if (!user?.id) return;
+        (async () => {
+            const { data } = await supabase.from('user_staff_colors').select('staff_id, color').eq('user_id', user.id);
+            if (data) {
+                const map = {};
+                data.forEach(r => { map[r.staff_id] = r.color; });
+                setStaffColorOverrides(map);
+            }
+        })();
+    }, [user?.id]);
 
     // Close color picker on outside click
     useEffect(() => {
@@ -87,18 +92,27 @@ export default function Calendar() {
         return () => document.removeEventListener('mousedown', handleClick);
     }, [colorPickerStaffId, colorPickerCalId]);
 
-    // Helper: get color for a staff member (override or default)
+    // Helper: get color for a staff member (override or white default)
     const getStaffColor = (staffId) => {
-        if (staffColorOverrides[staffId]) return staffColorOverrides[staffId];
-        const idx = staffList.findIndex(s => s.id === staffId);
-        return STAFF_COLORS[idx >= 0 ? idx % STAFF_COLORS.length : 0];
+        return staffColorOverrides[staffId] || '#ffffff';
     };
 
     // Helper: get color for an event based on its calendar
     const getCalendarColor = (graphCalendarId) => {
         if (!graphCalendarId || userCalendars.length === 0) return null;
         const cal = userCalendars.find(c => c.graph_calendar_id === graphCalendarId);
-        return cal?.color || null;
+        return cal?.user_color || '#ffffff';
+    };
+
+    // Helper: choose black or white text based on background luminance
+    const getContrastText = (hex) => {
+        if (!hex || hex.startsWith('var(')) return '#000000';
+        const c = hex.replace('#', '');
+        const r = parseInt(c.substring(0, 2), 16);
+        const g = parseInt(c.substring(2, 4), 16);
+        const b = parseInt(c.substring(4, 6), 16);
+        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        return luminance > 0.6 ? '#000000' : '#ffffff';
     };
 
     // Popover / Interaction State
@@ -563,12 +577,12 @@ export default function Calendar() {
                                 const sc = getStaffColor(ev.user_id);
                                 bgColor = sc;
                                 borderLeft = `3px solid rgba(0,0,0,0.15)`;
-                                textColor = '#ffffff';
-                            } else if (ev.graph_event_id) {
+                                textColor = getContrastText(sc);
+                            } else if (ev.graph_calendar_id) {
                                 const calColor = getCalendarColor(ev.graph_calendar_id);
                                 bgColor = calColor || '#0078D4';
                                 borderLeft = `3px solid ${calColor ? 'rgba(0,0,0,0.15)' : '#005a9e'}`;
-                                textColor = '#ffffff';
+                                textColor = getContrastText(bgColor);
                             } else if (ev.eventType === 'coaching') {
                                 bgColor = 'var(--success)';
                                 borderLeft = '3px solid rgba(34, 197, 94, 0.15)';
@@ -791,10 +805,10 @@ export default function Calendar() {
                                         let bgColor = '#ffffff', borderLeftColor = '#e0e0e0', textColor = '#000000';
                                         if (selectedUser === 'all' && ev.user_id) {
                                             const sc = getStaffColor(ev.user_id);
-                                            bgColor = sc; borderLeftColor = 'rgba(0,0,0,0.15)'; textColor = '#ffffff';
-                                        } else if (ev.graph_event_id) {
+                                            bgColor = sc; borderLeftColor = 'rgba(0,0,0,0.15)'; textColor = getContrastText(sc);
+                                        } else if (ev.graph_calendar_id) {
                                             const calColor = getCalendarColor(ev.graph_calendar_id);
-                                            bgColor = calColor || '#0078D4'; borderLeftColor = calColor ? 'rgba(0,0,0,0.15)' : '#005a9e'; textColor = '#ffffff';
+                                            bgColor = calColor || '#0078D4'; borderLeftColor = calColor ? 'rgba(0,0,0,0.15)' : '#005a9e'; textColor = getContrastText(bgColor);
                                         }
                                         else if (ev.eventType === 'coaching') { bgColor = 'var(--success)'; borderLeftColor = 'rgba(34,197,94,0.4)'; }
                                         else if (ev.eventType === 'workshop') { bgColor = 'var(--primary-light)'; borderLeftColor = 'var(--primary)'; }
@@ -891,12 +905,12 @@ export default function Calendar() {
                                         const sc = getStaffColor(ev.user_id);
                                         bgColor = sc;
                                         borderLeftColor = 'rgba(0,0,0,0.15)';
-                                        textColor = '#ffffff';
-                                    } else if (ev.graph_event_id) {
+                                        textColor = getContrastText(sc);
+                                    } else if (ev.graph_calendar_id) {
                                         const calColor = getCalendarColor(ev.graph_calendar_id);
                                         bgColor = calColor || '#0078D4';
                                         borderLeftColor = calColor ? 'rgba(0,0,0,0.15)' : '#005a9e';
-                                        textColor = '#ffffff';
+                                        textColor = getContrastText(bgColor);
                                     } else if (ev.eventType === 'coaching') {
                                         bgColor = 'var(--success)';
                                         borderLeftColor = 'rgba(34, 197, 94, 0.4)';
@@ -1126,9 +1140,9 @@ export default function Calendar() {
                                             style={{
                                                 display: 'flex', alignItems: 'center', gap: 6,
                                                 padding: '3px 10px', borderRadius: 'var(--radius-full)',
-                                                border: `2px solid ${isOn ? cal.color : 'var(--border)'}`,
-                                                background: isOn ? `${cal.color}22` : 'transparent',
-                                                color: isOn ? cal.color : 'var(--text-secondary)',
+                                                border: `2px solid ${isOn ? (cal.user_color || '#ffffff') : 'var(--border)'}`,
+                                                background: isOn ? `${cal.user_color || '#ffffff'}22` : 'transparent',
+                                                color: isOn ? (cal.user_color || '#ffffff') : 'var(--text-secondary)',
                                                 fontSize: 12, cursor: 'pointer',
                                                 fontWeight: isOn ? 600 : 400,
                                                 transition: 'all 0.15s'
@@ -1139,7 +1153,7 @@ export default function Calendar() {
                                                 title="Click to change colour"
                                                 style={{
                                                     width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-                                                    background: isOn ? cal.color : 'var(--text-muted)',
+                                                    background: isOn ? (cal.user_color || '#ffffff') : 'var(--text-muted)',
                                                     cursor: 'pointer',
                                                     border: '1px solid rgba(0,0,0,0.15)',
                                                     transition: 'transform 0.15s'
@@ -1153,42 +1167,26 @@ export default function Calendar() {
 
                                         {/* Color picker popover */}
                                         {colorPickerCalId === cal.graph_calendar_id && (
-                                            <div ref={colorPickerRef} style={{
+                                            <div ref={colorPickerRef} onClick={e => e.stopPropagation()} style={{
                                                 position: 'absolute', top: '100%', left: 0, marginTop: 6,
                                                 background: 'var(--bg-card)', border: '1px solid var(--border)',
-                                                borderRadius: 'var(--radius-md)', padding: 8,
+                                                borderRadius: 'var(--radius-md)', padding: 10,
                                                 boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
-                                                display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6,
-                                                zIndex: 100, animation: 'fadeslide 0.15s ease-out'
+                                                zIndex: 100, animation: 'fadeslide 0.15s ease-out',
+                                                width: 260,
                                             }}>
-                                                {STAFF_COLORS.map(c => (
-                                                    <button
-                                                        key={c}
-                                                        onClick={async (e) => {
-                                                            e.stopPropagation();
-                                                            // Update local state immediately
-                                                            setUserCalendars(prev => prev.map(uc =>
-                                                                uc.graph_calendar_id === cal.graph_calendar_id ? { ...uc, color: c } : uc
-                                                            ));
-                                                            setColorPickerCalId(null);
-                                                            // Persist to Supabase
-                                                            await supabase.from('user_calendars')
-                                                                .update({ color: c })
-                                                                .eq('user_id', user.id)
-                                                                .eq('graph_calendar_id', cal.graph_calendar_id);
-                                                        }}
-                                                        style={{
-                                                            width: 22, height: 22, borderRadius: '50%',
-                                                            background: c, border: c === cal.color ? '2px solid var(--text-primary)' : '2px solid transparent',
-                                                            cursor: 'pointer', padding: 0,
-                                                            transition: 'transform 0.1s, border-color 0.1s',
-                                                            outline: 'none'
-                                                        }}
-                                                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.2)'}
-                                                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                                                        title={c}
-                                                    />
-                                                ))}
+                                                <ColorSwatchPicker
+                                                    value={cal.user_color || '#ffffff'}
+                                                    onChange={async (c) => {
+                                                        setUserCalendars(prev => prev.map(uc =>
+                                                            uc.graph_calendar_id === cal.graph_calendar_id ? { ...uc, user_color: c } : uc
+                                                        ));
+                                                        await supabase.from('user_calendars')
+                                                            .update({ user_color: c })
+                                                            .eq('user_id', user.id)
+                                                            .eq('graph_calendar_id', cal.graph_calendar_id);
+                                                    }}
+                                                />
                                             </div>
                                         )}
                                     </div>
@@ -1250,34 +1248,22 @@ export default function Calendar() {
 
                                         {/* Color picker popover */}
                                         {colorPickerStaffId === s.id && (
-                                            <div ref={colorPickerRef} style={{
+                                            <div ref={colorPickerRef} onClick={e => e.stopPropagation()} style={{
                                                 position: 'absolute', top: '100%', left: 0, marginTop: 6,
                                                 background: 'var(--bg-card)', border: '1px solid var(--border)',
-                                                borderRadius: 'var(--radius-md)', padding: 8,
+                                                borderRadius: 'var(--radius-md)', padding: 10,
                                                 boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
-                                                display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6,
-                                                zIndex: 100, animation: 'fadeslide 0.15s ease-out'
+                                                zIndex: 100, animation: 'fadeslide 0.15s ease-out',
+                                                width: 260,
                                             }}>
-                                                {STAFF_COLORS.map(c => (
-                                                    <button
-                                                        key={c}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setStaffColorOverrides(prev => ({ ...prev, [s.id]: c }));
-                                                            setColorPickerStaffId(null);
-                                                        }}
-                                                        style={{
-                                                            width: 22, height: 22, borderRadius: '50%',
-                                                            background: c, border: c === color ? '2px solid var(--text-primary)' : '2px solid transparent',
-                                                            cursor: 'pointer', padding: 0,
-                                                            transition: 'transform 0.1s, border-color 0.1s',
-                                                            outline: 'none'
-                                                        }}
-                                                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.2)'}
-                                                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                                                        title={c}
-                                                    />
-                                                ))}
+                                                <ColorSwatchPicker
+                                                    value={color}
+                                                    onChange={async (c) => {
+                                                        setStaffColorOverrides(prev => ({ ...prev, [s.id]: c }));
+                                                        await supabase.from('user_staff_colors')
+                                                            .upsert({ user_id: user.id, staff_id: s.id, color: c }, { onConflict: 'user_id,staff_id' });
+                                                    }}
+                                                />
                                             </div>
                                         )}
                                     </div>
