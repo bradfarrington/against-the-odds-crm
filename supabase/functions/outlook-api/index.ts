@@ -10,7 +10,8 @@ serve(async (req: Request) => {
             action, userId, linkedId, linkedType, toRecipients,
             subject, bodyHtml, messageId, ccRecipients, bccRecipients,
             eventId, startDateTime, endDateTime, locationStr,
-            isAllDay, transactionId, calendarId, attachments
+            isAllDay, transactionId, calendarId, attachments,
+            isOnlineMeeting, meetingAttendees
         } = payload
 
         const supabase = getSupabase()
@@ -199,6 +200,20 @@ serve(async (req: Request) => {
                 headers: { 'Authorization': `Bearer ${accessToken}` }
             })
         } else if (action === 'createEvent' || action === 'updateEvent') {
+            // Build attendees from either meetingAttendees (rich objects) or toRecipients (plain emails)
+            let attendeesList: any[] = []
+            if (meetingAttendees && meetingAttendees.length > 0) {
+                attendeesList = meetingAttendees.map((a: any) => ({
+                    emailAddress: { address: a.email, name: a.name || '' },
+                    type: a.type || 'required'
+                }))
+            } else if (toRecipients && toRecipients.length > 0) {
+                attendeesList = toRecipients.map((email: string) => ({
+                    emailAddress: { address: email },
+                    type: 'required'
+                }))
+            }
+
             const eventPayload: any = {
                 subject: subject || '(No Title)',
                 body: { contentType: 'HTML', content: bodyHtml || '' },
@@ -206,8 +221,15 @@ serve(async (req: Request) => {
                 end: { dateTime: endDateTime, timeZone: 'UTC' },
                 location: { displayName: locationStr || '' },
                 isAllDay: isAllDay || false,
-                attendees: (toRecipients || []).map((email: string) => ({ emailAddress: { address: email }, type: 'required' })),
+                attendees: attendeesList,
                 transactionId: transactionId || undefined
+            }
+
+            // Enable Teams online meeting if requested
+            // Do NOT set onlineMeetingProvider — let Graph auto-detect based on user's license
+            if (isOnlineMeeting) {
+                eventPayload.isOnlineMeeting = true
+                eventPayload.onlineMeetingProvider = 'teamsForBusiness'
             }
 
             if (linkedId) {
@@ -221,6 +243,8 @@ serve(async (req: Request) => {
                 ]
             }
 
+            console.log('[outlook-api] createEvent/updateEvent payload:', JSON.stringify({ isOnlineMeeting: eventPayload.isOnlineMeeting, onlineMeetingProvider: eventPayload.onlineMeetingProvider, attendeesCount: attendeesList.length }))
+
             if (action === 'createEvent') {
                 const createUrl = calendarId
                     ? `https://graph.microsoft.com/v1.0/me/calendars/${calendarId}/events`
@@ -230,6 +254,21 @@ serve(async (req: Request) => {
                     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify(eventPayload)
                 })
+
+                if (graphRes.ok) {
+                    const createdEvent = await graphRes.json()
+                    const joinUrl = createdEvent.onlineMeeting?.joinUrl || null
+                    console.log('[outlook-api] Event created. isOnlineMeeting:', createdEvent.isOnlineMeeting, 'joinUrl:', joinUrl, 'onlineMeetingProvider:', createdEvent.onlineMeetingProvider)
+                    return new Response(JSON.stringify({
+                        success: true,
+                        eventId: createdEvent.id,
+                        onlineMeetingUrl: joinUrl
+                    }), { status: 200, headers: corsHeaders })
+                } else {
+                    const errBody = await graphRes.text()
+                    console.error('[outlook-api] Graph createEvent failed:', graphRes.status, errBody)
+                    return new Response(JSON.stringify({ error: 'Graph API error', status: graphRes.status, details: errBody }), { status: graphRes.status, headers: corsHeaders })
+                }
             } else {
                 graphRes = await fetch(`https://graph.microsoft.com/v1.0/me/events/${eventId}`, {
                     method: 'PATCH',
@@ -350,8 +389,66 @@ serve(async (req: Request) => {
 
             const eventsToUpsert = []
             for (const event of allOutlookEvents) {
-                // Skip if it was created by the CRM (has localevent: prefix in transactionId)
-                if (event.transactionId?.startsWith('localevent:')) continue;
+                // For events created by the CRM (localevent: prefix), update the existing local record
+                // with full Graph data (organizer, Teams URL, attendees, response status)
+                if (event.transactionId?.startsWith('localevent:')) {
+                    // Find the matching local appointment by user_id + title + approximate start time
+                    let meetingUrl = event.onlineMeetingUrl || event.onlineMeeting?.joinUrl || null
+                    if (!meetingUrl && event.body?.content) {
+                        const bodyText = event.body.content
+                        const patterns = [
+                            /https:\/\/teams\.microsoft\.com\/l\/meetup-join\/[^"\s<>]+/i,
+                            /https:\/\/[a-z0-9]+\.zoom\.us\/j\/[^"\s<>]+/i,
+                            /https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}/i
+                        ]
+                        for (const pattern of patterns) {
+                            const match = bodyText.match(pattern)
+                            if (match) { meetingUrl = match[0]; break }
+                        }
+                    }
+
+                    // Update the local record: match by user_id and title, or just ensure graph_event_id is set
+                    const updateData: any = {
+                        graph_event_id: event.id,
+                        online_meeting_url: meetingUrl,
+                        organizer: event.organizer || null,
+                        attendees: event.attendees || [],
+                        response_status: event.responseStatus || null
+                    }
+
+                    // Try to find and update existing local appointment without graph_event_id
+                    const { data: localMatch } = await supabase
+                        .from('appointments')
+                        .select('id')
+                        .eq('user_id', userId)
+                        .is('graph_event_id', null)
+                        .eq('title', event.subject || '(No Title)')
+                        .limit(1)
+
+                    if (localMatch && localMatch.length > 0) {
+                        await supabase.from('appointments').update(updateData).eq('id', localMatch[0].id)
+                        console.log(`[outlook-api] Updated local event "${event.subject}" with Graph data (meetingUrl: ${meetingUrl ? 'yes' : 'no'})`)
+                    } else {
+                        // If no local match found, still add it as a regular event with graph_event_id
+                        // (this handles edge cases where the local record was already synced)
+                        eventsToUpsert.push({
+                            title: event.subject || '(No Title)',
+                            description: event.bodyPreview || '',
+                            start_time: event.start?.dateTime,
+                            end_time: event.end?.dateTime,
+                            location: event.location?.displayName || '',
+                            user_id: userId,
+                            graph_event_id: event.id,
+                            graph_calendar_id: event._calendarId ?? event.calendar?.id ?? null,
+                            is_all_day: event.isAllDay || false,
+                            online_meeting_url: meetingUrl,
+                            attendees: event.attendees || [],
+                            organizer: event.organizer || null,
+                            response_status: event.responseStatus || null
+                        })
+                    }
+                    continue
+                }
 
                 let matchedContactId = null
                 let matchedSeekerId = null

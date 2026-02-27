@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { supabase } from '../lib/supabaseClient';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Users, Clock, MapPin, AlignLeft, Building2, User, Filter, RefreshCw, Video, ExternalLink, Mail, Briefcase, Heart, ChevronDown, Presentation } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Users, Clock, MapPin, AlignLeft, Building2, User, Filter, RefreshCw, Video, ExternalLink, Mail, Briefcase, Heart, ChevronDown, Presentation, X, Search, UserPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
 import CoachingSessionModal from '../components/CoachingSessionModal';
@@ -125,7 +125,18 @@ export default function Calendar() {
     // Modal state
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalCalendars, setModalCalendars] = useState([]);
-    const [newEvent, setNewEvent] = useState({ title: '', start_time: '', durationHours: 1, durationMinutes: 0, location: '', description: '', is_all_day: false, contact_id: '', recovery_seeker_id: '', staff_id: user?.id || '', graph_calendar_id: '' });
+    const [newEvent, setNewEvent] = useState({ title: '', start_time: '', durationHours: 1, durationMinutes: 0, location: '', description: '', is_all_day: false, contact_id: '', recovery_seeker_id: '', staff_id: user?.id || '', graph_calendar_id: '', isMeeting: false, meetingContacts: [], guests: [] });
+
+    // Meeting modal toggle state
+    const [isTeamsMeeting, setIsTeamsMeeting] = useState(true);
+    const [showGuests, setShowGuests] = useState(false);
+
+    // Meeting modal helpers
+    const [contactSearchQuery, setContactSearchQuery] = useState('');
+    const [contactSearchOpen, setContactSearchOpen] = useState(false);
+    const [guestName, setGuestName] = useState('');
+    const [guestEmail, setGuestEmail] = useState('');
+    const contactSearchRef = useRef(null);
 
     // New Event dropdown state
     const [newEventDropdownOpen, setNewEventDropdownOpen] = useState(false);
@@ -466,6 +477,36 @@ export default function Calendar() {
             endDateTime.setMinutes(endDateTime.getMinutes() + parseInt(newEvent.durationMinutes));
         }
 
+        // Build attendees list for meetings
+        let meetingAttendees = [];
+        let onlineMeetingUrl = null;
+        if (newEvent.isMeeting) {
+            // Add CRM contacts
+            const contacts = dataState.contacts || [];
+            newEvent.meetingContacts.forEach(contactId => {
+                const contact = contacts.find(c => c.id === contactId);
+                if (contact?.email) {
+                    meetingAttendees.push({
+                        email: contact.email,
+                        name: `${contact.firstName || ''} ${contact.lastName || ''}`.trim(),
+                        type: 'required'
+                    });
+                }
+            });
+            // Add external guests
+            if (showGuests) {
+                newEvent.guests.forEach(guest => {
+                    if (guest.email) {
+                        meetingAttendees.push({
+                            email: guest.email,
+                            name: guest.name || '',
+                            type: 'required'
+                        });
+                    }
+                });
+            }
+        }
+
         // Try to push to Outlook if the assigned staff member is connected
         const assignedUserId = newEvent.staff_id || user.id;
         const { data: conn } = await supabase.from('user_oauth_connections').select('id').eq('user_id', assignedUserId).maybeSingle();
@@ -481,39 +522,72 @@ export default function Calendar() {
                     bodyHtml: newEvent.description,
                     locationStr: newEvent.location,
                     isAllDay: newEvent.is_all_day,
-                    transactionId: `localevent:${crypto.randomUUID()}`
+                    transactionId: `localevent:${crypto.randomUUID()}`,
+                    isOnlineMeeting: newEvent.isMeeting && isTeamsMeeting,
+                    meetingAttendees: newEvent.isMeeting ? meetingAttendees : undefined
                 };
 
-                const { error: pushError } = await supabase.functions.invoke('outlook-api', {
+                console.log('[Calendar] Creating event with payload:', JSON.stringify({ isOnlineMeeting: payload.isOnlineMeeting, attendeesCount: payload.meetingAttendees?.length || 0 }));
+
+                const { data: apiRes, error: pushError } = await supabase.functions.invoke('outlook-api', {
                     body: payload
                 });
 
-                // Even if graph fails, we can proceed to insert it locally (or handle as an alert)
-                if (pushError) console.warn("Failed to push to graph api", pushError.message);
+                console.log('[Calendar] Edge function response:', JSON.stringify(apiRes), 'error:', pushError);
+
+                if (pushError) {
+                    console.warn("Failed to push to graph api", pushError.message);
+                } else if (apiRes?.onlineMeetingUrl) {
+                    onlineMeetingUrl = apiRes.onlineMeetingUrl;
+                }
             } catch (err) {
                 console.error(err);
             }
         }
 
+        // Determine linked contact (first selected CRM contact for meetings, or single dropdown selection)
+        const linkedContactId = newEvent.isMeeting
+            ? (newEvent.meetingContacts.length > 0 ? newEvent.meetingContacts[0] : null)
+            : (newEvent.contact_id || null);
+
         // Insert into Supabase (Fallback/Local immediately)
-        const { error } = await supabase.from('appointments').insert({
+        const insertData = {
             title: newEvent.title,
             start_time: new Date(newEvent.start_time).toISOString(),
             end_time: endDateTime.toISOString(),
             location: newEvent.location,
             description: newEvent.description,
             is_all_day: newEvent.is_all_day,
-            contact_id: newEvent.contact_id || null,
-            recovery_seeker_id: newEvent.recovery_seeker_id || null,
+            contact_id: linkedContactId,
+            recovery_seeker_id: newEvent.isMeeting ? null : (newEvent.recovery_seeker_id || null),
             user_id: newEvent.staff_id || user.id,
-            graph_calendar_id: newEvent.graph_calendar_id || null
-        });
+            graph_calendar_id: newEvent.graph_calendar_id || null,
+            organizer: { emailAddress: { address: user.email, name: user.user_metadata?.full_name || user.email } }
+        };
+        if (onlineMeetingUrl) {
+            insertData.online_meeting_url = onlineMeetingUrl;
+        }
+        if (meetingAttendees.length > 0) {
+            insertData.attendees = meetingAttendees.map(a => ({
+                emailAddress: { address: a.email, name: a.name },
+                status: { response: 'none' }
+            }));
+        }
+
+        const { error } = await supabase.from('appointments').insert(insertData);
 
         if (!error) {
             setIsModalOpen(false);
-            setNewEvent({ title: '', start_time: '', durationHours: 1, durationMinutes: 0, location: '', description: '', is_all_day: false, contact_id: '', recovery_seeker_id: '', staff_id: user?.id || '', graph_calendar_id: '' });
+            setNewEvent({ title: '', start_time: '', durationHours: 1, durationMinutes: 0, location: '', description: '', is_all_day: false, contact_id: '', recovery_seeker_id: '', staff_id: user?.id || '', graph_calendar_id: '', isMeeting: false, meetingContacts: [], guests: [] });
+            setIsTeamsMeeting(true);
+            setShowGuests(false);
+            setContactSearchQuery('');
+            setGuestName('');
+            setGuestEmail('');
             setModalCalendars([]);
-            fetchAppointments({ skipOutlookSync: true });
+            // For meeting events, do a full sync to pull in Graph event data (Teams URL, attendees, etc.)
+            // For non-meetings, skip the sync for faster UX
+            fetchAppointments({ skipOutlookSync: !newEvent.isMeeting });
         } else {
             alert('Error creating event locally: ' + error.message);
         }
@@ -1099,7 +1173,12 @@ export default function Calendar() {
                                                 navigate('/workshop-tracker');
                                             } else if (item.key === 'coaching') {
                                                 navigate('/treatment-tracker');
-                                            } else if (item.key === 'meeting' || item.key === 'personal') {
+                                            } else if (item.key === 'meeting') {
+                                                setNewEvent(prev => ({ ...prev, isMeeting: true, meetingContacts: [], guests: [] }));
+                                                fetchModalCalendars(user?.id);
+                                                setIsModalOpen(true);
+                                            } else if (item.key === 'personal') {
+                                                setNewEvent(prev => ({ ...prev, isMeeting: false, meetingContacts: [], guests: [] }));
                                                 fetchModalCalendars(user?.id);
                                                 setIsModalOpen(true);
                                             }
@@ -1360,12 +1439,12 @@ export default function Calendar() {
             </div>
 
             {/* Add / Edit Appointment Modal (existing logic omitted for brevity in updates, using standard Modal) */}
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="New Event">
+            <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setContactSearchQuery(''); setContactSearchOpen(false); setGuestName(''); setGuestEmail(''); }} title={newEvent.isMeeting ? 'New Meeting' : 'New Event'}>
                 <form onSubmit={handleCreateEvent}>
                     <div className="modal-body">
                         <div className="form-group">
                             <label className="form-label">Event Title *</label>
-                            <input className="form-input" required value={newEvent.title} onChange={e => setNewEvent({ ...newEvent, title: e.target.value })} placeholder="Meeting with..." />
+                            <input className="form-input" required value={newEvent.title} onChange={e => setNewEvent({ ...newEvent, title: e.target.value })} placeholder={newEvent.isMeeting ? 'Meeting with...' : 'Event title...'} />
                         </div>
                         <div style={{ display: 'flex', gap: 'var(--space-md)' }}>
                             <div className="form-group" style={{ flex: 1 }}>
@@ -1422,6 +1501,280 @@ export default function Calendar() {
                                 </select>
                             </div>
                         )}
+
+                        {/* Meeting mode: Contacts, Teams toggle, Guests toggle */}
+                        {newEvent.isMeeting ? (
+                            <>
+                                {/* Multi-select CRM Contact picker */}
+                                <div className="form-group">
+                                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <Users size={14} />
+                                        Invite CRM Contacts
+                                    </label>
+                                    {/* Selected contacts chips */}
+                                    {newEvent.meetingContacts.length > 0 && (
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                                            {newEvent.meetingContacts.map(cId => {
+                                                const c = dataState.contacts?.find(ct => ct.id === cId);
+                                                if (!c) return null;
+                                                return (
+                                                    <span key={cId} style={{
+                                                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                                                        padding: '4px 10px', borderRadius: 'var(--radius-full)',
+                                                        background: 'var(--primary-light)', color: 'var(--primary)',
+                                                        fontSize: 12, fontWeight: 500
+                                                    }}>
+                                                        {c.firstName} {c.lastName}
+                                                        {c.email && <span style={{ fontSize: 11, opacity: 0.7 }}>({c.email})</span>}
+                                                        <button type="button" onClick={() => setNewEvent(prev => ({
+                                                            ...prev,
+                                                            meetingContacts: prev.meetingContacts.filter(id => id !== cId)
+                                                        }))} style={{
+                                                            background: 'none', border: 'none', cursor: 'pointer',
+                                                            padding: 0, display: 'flex', color: 'var(--primary)'
+                                                        }}>
+                                                            <X size={14} />
+                                                        </button>
+                                                    </span>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                    {/* Search input */}
+                                    <div ref={contactSearchRef} style={{ position: 'relative' }}>
+                                        <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+                                        <input
+                                            className="form-input"
+                                            style={{ paddingLeft: 36 }}
+                                            placeholder="Search contacts..."
+                                            value={contactSearchQuery}
+                                            onChange={e => { setContactSearchQuery(e.target.value); setContactSearchOpen(true); }}
+                                            onFocus={() => setContactSearchOpen(true)}
+                                        />
+                                        {contactSearchOpen && (() => {
+                                            const q = contactSearchQuery.toLowerCase();
+                                            const available = (dataState.contacts || []).filter(c =>
+                                                !newEvent.meetingContacts.includes(c.id) &&
+                                                (q === '' || `${c.firstName} ${c.lastName} ${c.email || ''}`.toLowerCase().includes(q))
+                                            ).slice(0, 8);
+                                            if (available.length === 0 && q !== '') return (
+                                                <div style={{
+                                                    position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4,
+                                                    background: 'var(--bg-card)', border: '1px solid var(--border)',
+                                                    borderRadius: 'var(--radius-md)', boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
+                                                    zIndex: 50, padding: '12px 16px', fontSize: 13, color: 'var(--text-muted)'
+                                                }}>No contacts found</div>
+                                            );
+                                            if (available.length === 0) return null;
+                                            return (
+                                                <div style={{
+                                                    position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4,
+                                                    background: 'var(--bg-card)', border: '1px solid var(--border)',
+                                                    borderRadius: 'var(--radius-md)', boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
+                                                    zIndex: 50, maxHeight: 200, overflowY: 'auto'
+                                                }}>
+                                                    {available.map(c => (
+                                                        <button
+                                                            key={c.id}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setNewEvent(prev => ({
+                                                                    ...prev,
+                                                                    meetingContacts: [...prev.meetingContacts, c.id]
+                                                                }));
+                                                                setContactSearchQuery('');
+                                                                setContactSearchOpen(false);
+                                                            }}
+                                                            style={{
+                                                                display: 'flex', alignItems: 'center', gap: 10,
+                                                                width: '100%', padding: '10px 14px',
+                                                                border: 'none', background: 'transparent',
+                                                                cursor: 'pointer', textAlign: 'left',
+                                                                borderBottom: '1px solid var(--border)',
+                                                                transition: 'background 0.15s',
+                                                                color: 'var(--text-primary)'
+                                                            }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                                        >
+                                                            <div style={{
+                                                                width: 30, height: 30, borderRadius: '50%',
+                                                                background: 'var(--primary)', color: 'white',
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                fontSize: 12, fontWeight: 600, flexShrink: 0
+                                                            }}>
+                                                                {(c.firstName || 'U').charAt(0).toUpperCase()}
+                                                            </div>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                                                <span style={{ fontSize: 13, fontWeight: 500 }}>{c.firstName} {c.lastName}</span>
+                                                                {c.email && <span style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.email}</span>}
+                                                                {!c.email && <span style={{ fontSize: 11, color: '#EF4444' }}>No email address</span>}
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                </div>
+
+                                {/* Teams Meeting Toggle */}
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                    padding: '12px 14px', borderRadius: 'var(--radius-md)',
+                                    background: isTeamsMeeting ? 'linear-gradient(135deg, #5B5FC7 0%, #7B83EB 100%)' : 'var(--bg-input)',
+                                    border: isTeamsMeeting ? 'none' : '1px solid var(--border)',
+                                    marginBottom: 16, transition: 'all 0.2s'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                        <Video size={18} style={{ color: isTeamsMeeting ? 'white' : 'var(--text-muted)' }} />
+                                        <div>
+                                            <div style={{ fontSize: 13, fontWeight: 600, color: isTeamsMeeting ? 'white' : 'var(--text-primary)' }}>Teams Meeting</div>
+                                            <div style={{ fontSize: 11, color: isTeamsMeeting ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)' }}>
+                                                {isTeamsMeeting ? 'A Teams link will be generated' : 'Face-to-face or other location'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsTeamsMeeting(prev => !prev)}
+                                        style={{
+                                            width: 44, height: 24, borderRadius: 12, border: 'none',
+                                            background: isTeamsMeeting ? 'rgba(255,255,255,0.35)' : 'var(--border)',
+                                            position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
+                                            flexShrink: 0
+                                        }}
+                                    >
+                                        <span style={{
+                                            position: 'absolute', top: 2, left: isTeamsMeeting ? 22 : 2,
+                                            width: 20, height: 20, borderRadius: '50%',
+                                            background: 'white', transition: 'left 0.2s',
+                                            boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                                        }} />
+                                    </button>
+                                </div>
+
+                                {/* Guests Toggle + Fields */}
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                    padding: '12px 14px', borderRadius: 'var(--radius-md)',
+                                    background: showGuests ? 'var(--primary-light)' : 'var(--bg-input)',
+                                    border: `1px solid ${showGuests ? 'var(--primary)' : 'var(--border)'}`,
+                                    marginBottom: showGuests ? 12 : 16, transition: 'all 0.2s'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                        <UserPlus size={18} style={{ color: showGuests ? 'var(--primary)' : 'var(--text-muted)' }} />
+                                        <div>
+                                            <div style={{ fontSize: 13, fontWeight: 600, color: showGuests ? 'var(--primary)' : 'var(--text-primary)' }}>Add External Guests</div>
+                                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Invite people outside of your CRM</div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowGuests(prev => !prev)}
+                                        style={{
+                                            width: 44, height: 24, borderRadius: 12, border: 'none',
+                                            background: showGuests ? 'var(--primary)' : 'var(--border)',
+                                            position: 'relative', cursor: 'pointer', transition: 'background 0.2s',
+                                            flexShrink: 0
+                                        }}
+                                    >
+                                        <span style={{
+                                            position: 'absolute', top: 2, left: showGuests ? 22 : 2,
+                                            width: 20, height: 20, borderRadius: '50%',
+                                            background: 'white', transition: 'left 0.2s',
+                                            boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                                        }} />
+                                    </button>
+                                </div>
+
+                                {/* Guest fields — only shown when toggle is on */}
+                                {showGuests && (
+                                    <div className="form-group" style={{ marginBottom: 16 }}>
+                                        {/* Existing guests chips */}
+                                        {newEvent.guests.length > 0 && (
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                                                {newEvent.guests.map((g, idx) => (
+                                                    <span key={idx} style={{
+                                                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                                                        padding: '4px 10px', borderRadius: 'var(--radius-full)',
+                                                        background: 'var(--bg-input)', border: '1px solid var(--border)',
+                                                        fontSize: 12, fontWeight: 500, color: 'var(--text-primary)'
+                                                    }}>
+                                                        <Mail size={12} style={{ color: 'var(--text-muted)' }} />
+                                                        {g.name || g.email}
+                                                        {g.name && <span style={{ fontSize: 11, opacity: 0.7 }}>({g.email})</span>}
+                                                        <button type="button" onClick={() => setNewEvent(prev => ({
+                                                            ...prev,
+                                                            guests: prev.guests.filter((_, i) => i !== idx)
+                                                        }))} style={{
+                                                            background: 'none', border: 'none', cursor: 'pointer',
+                                                            padding: 0, display: 'flex', color: 'var(--text-muted)'
+                                                        }}>
+                                                            <X size={14} />
+                                                        </button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {/* Add guest input row */}
+                                        <div style={{ display: 'flex', gap: 8 }}>
+                                            <input
+                                                className="form-input"
+                                                style={{ flex: 1 }}
+                                                placeholder="Name"
+                                                value={guestName}
+                                                onChange={e => setGuestName(e.target.value)}
+                                            />
+                                            <input
+                                                className="form-input"
+                                                style={{ flex: 1.5 }}
+                                                placeholder="Email *"
+                                                type="email"
+                                                value={guestEmail}
+                                                onChange={e => setGuestEmail(e.target.value)}
+                                            />
+                                            <button
+                                                type="button"
+                                                className="btn btn-secondary"
+                                                disabled={!guestEmail.trim()}
+                                                onClick={() => {
+                                                    if (!guestEmail.trim()) return;
+                                                    setNewEvent(prev => ({
+                                                        ...prev,
+                                                        guests: [...prev.guests, { name: guestName.trim(), email: guestEmail.trim() }]
+                                                    }));
+                                                    setGuestName('');
+                                                    setGuestEmail('');
+                                                }}
+                                                style={{ flexShrink: 0 }}
+                                            >
+                                                <Plus size={16} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            /* Non-meeting mode: standard contact/seeker linking */
+                            <>
+                                <div className="form-group">
+                                    <label className="form-label">Link to Contact (Optional)</label>
+                                    <select className="form-input" value={newEvent.contact_id} onChange={e => setNewEvent({ ...newEvent, contact_id: e.target.value, recovery_seeker_id: '' })}>
+                                        <option value="">-- No Contact --</option>
+                                        {dataState.contacts?.map(c => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Or Link to Recovery Seeker (Optional)</label>
+                                    <select className="form-input" value={newEvent.recovery_seeker_id} onChange={e => setNewEvent({ ...newEvent, recovery_seeker_id: e.target.value, contact_id: '' })}>
+                                        <option value="">-- No Seeker --</option>
+                                        {dataState.recoverySeekers?.map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}
+                                    </select>
+                                </div>
+                            </>
+                        )}
+
                         <div className="form-group" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                             <input type="checkbox" id="allDay" checked={newEvent.is_all_day} onChange={e => setNewEvent({ ...newEvent, is_all_day: e.target.checked })} />
                             <label htmlFor="allDay" style={{ fontSize: 13, userSelect: 'none' }}>All Day Event</label>
@@ -1430,31 +1783,19 @@ export default function Calendar() {
                             <label className="form-label">Location (Optional)</label>
                             <div style={{ position: 'relative' }}>
                                 <MapPin size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                                <input className="form-input" style={{ paddingLeft: 36 }} value={newEvent.location} onChange={e => setNewEvent({ ...newEvent, location: e.target.value })} placeholder="Online, Office..." />
+                                <input className="form-input" style={{ paddingLeft: 36 }} value={newEvent.location} onChange={e => setNewEvent({ ...newEvent, location: e.target.value })} placeholder={newEvent.isMeeting && isTeamsMeeting ? 'Microsoft Teams (auto)' : 'Office, conference room...'} />
                             </div>
                         </div>
                         <div className="form-group">
                             <label className="form-label">Description (Optional)</label>
                             <textarea className="form-input" rows="3" value={newEvent.description} onChange={e => setNewEvent({ ...newEvent, description: e.target.value })} placeholder="Notes..."></textarea>
                         </div>
-                        <div className="form-group">
-                            <label className="form-label">Link to Contact (Optional)</label>
-                            <select className="form-input" value={newEvent.contact_id} onChange={e => setNewEvent({ ...newEvent, contact_id: e.target.value, recovery_seeker_id: '' })}>
-                                <option value="">-- No Contact --</option>
-                                {dataState.contacts?.map(c => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
-                            </select>
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">Or Link to Recovery Seeker (Optional)</label>
-                            <select className="form-input" value={newEvent.recovery_seeker_id} onChange={e => setNewEvent({ ...newEvent, recovery_seeker_id: e.target.value, contact_id: '' })}>
-                                <option value="">-- No Seeker --</option>
-                                {dataState.recoverySeekers?.map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}
-                            </select>
-                        </div>
                     </div>
                     <div className="modal-footer">
-                        <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>Cancel</button>
-                        <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Saving...' : 'Save Event'}</button>
+                        <button type="button" className="btn btn-secondary" onClick={() => { setIsModalOpen(false); setContactSearchQuery(''); setContactSearchOpen(false); }}>Cancel</button>
+                        <button type="submit" className="btn btn-primary" disabled={submitting}>
+                            {submitting ? 'Creating...' : (newEvent.isMeeting ? 'Create & Send Invites' : 'Save Event')}
+                        </button>
                     </div>
                 </form>
             </Modal>
@@ -1577,7 +1918,7 @@ export default function Calendar() {
                                 {(() => {
                                     const userEmail = (user?.email || '').toLowerCase();
                                     const organiserEmail = (selectedEventInfo.event.organizer?.emailAddress?.address || '').toLowerCase();
-                                    const isOrganiser = userEmail && organiserEmail && userEmail === organiserEmail;
+                                    const isOrganiser = (userEmail && organiserEmail && userEmail === organiserEmail) || (selectedEventInfo.event.user_id === user?.id);
                                     const attendeesList = selectedEventInfo.event.attendees || [];
                                     const isAttendee = !isOrganiser && attendeesList.some(a =>
                                         (a.emailAddress?.address || '').toLowerCase() === userEmail
