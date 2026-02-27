@@ -342,6 +342,35 @@ a:hover {
   padding: var(--space-md) var(--space-md) var(--space-sm);
 }
 
+.sidebar-section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast);
+}
+
+.sidebar-section-toggle:hover {
+  color: var(--text-secondary);
+}
+
+.sidebar-section-chevron {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.6;
+  transition: opacity var(--transition-fast);
+}
+
+.sidebar-section-toggle:hover .sidebar-section-chevron {
+  opacity: 1;
+}
+
 .nav-link {
   display: flex;
   align-items: center;
@@ -1076,6 +1105,10 @@ a:hover {
 
 .modal-lg {
   max-width: 720px;
+}
+
+.modal-xl {
+  max-width: 1200px;
 }
 
 .modal-header {

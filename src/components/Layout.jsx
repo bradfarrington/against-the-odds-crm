@@ -25,6 +25,8 @@ import {
     X,
     PanelLeftClose,
     PanelLeftOpen,
+    ChevronDown,
+    ChevronRight,
 } from 'lucide-react';
 
 const navSections = [
@@ -77,6 +79,20 @@ export default function Layout() {
     const [isCollapsed, setIsCollapsed] = useState(() => {
         try { return localStorage.getItem('sidebar-collapsed') === 'true'; } catch { return false; }
     });
+    const [collapsedSections, setCollapsedSections] = useState(() => {
+        try {
+            const saved = localStorage.getItem('sidebar-collapsed-sections');
+            return saved ? JSON.parse(saved) : {};
+        } catch { return {}; }
+    });
+
+    const toggleSection = (label) => {
+        setCollapsedSections(prev => {
+            const next = { ...prev, [label]: !prev[label] };
+            try { localStorage.setItem('sidebar-collapsed-sections', JSON.stringify(next)); } catch { }
+            return next;
+        });
+    };
     const { theme } = useTheme();
     const { user, logout } = useAuth();
     const { state, dataLoading, dataError, reloadData } = useData();
@@ -198,9 +214,20 @@ export default function Layout() {
                 <nav className="sidebar-nav">
                     {navSections.map((section, i) => (
                         <div key={section.label || i}>
-                            {section.label && !isCollapsed && <div className="sidebar-section-label">{section.label}</div>}
+                            {section.label && !isCollapsed && (
+                                <button
+                                    className="sidebar-section-label sidebar-section-toggle"
+                                    onClick={() => toggleSection(section.label)}
+                                >
+                                    <span>{section.label}</span>
+                                    {collapsedSections[section.label]
+                                        ? <ChevronRight className="sidebar-section-chevron" />
+                                        : <ChevronDown className="sidebar-section-chevron" />
+                                    }
+                                </button>
+                            )}
                             {section.label && isCollapsed && <div className="sidebar-section-divider" />}
-                            {section.items.map(item => (
+                            {(!section.label || !collapsedSections[section.label] || isCollapsed) && section.items.map(item => (
                                 <NavLink
                                     key={item.to}
                                     to={item.to}

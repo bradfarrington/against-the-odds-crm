@@ -23,7 +23,12 @@ export default function Invoices({ category }) {
     const [editItem, setEditItem] = useState(null);
     const [lineItems, setLineItems] = useState([]);
     const [previewInvoice, setPreviewInvoice] = useState(null);
-    const [sending, setSending] = useState(null); // invoice id being sent
+    const [sending, setSending] = useState(null);
+    const [modalCompanyId, setModalCompanyId] = useState('');
+    const [modalContactId, setModalContactId] = useState('');
+    const [modalInvoiceNumber, setModalInvoiceNumber] = useState('');
+    const [modalDateIssued, setModalDateIssued] = useState('');
+    const [modalDateDue, setModalDateDue] = useState('');
     const { sortConfig, requestSort, sortedData } = useTableSort();
 
     const allInvoices = (state.invoices || []).filter(inv => !category || inv.category === category);
@@ -58,6 +63,11 @@ export default function Invoices({ category }) {
     const openCreate = () => {
         setEditItem(null);
         setLineItems([{ description: '', quantity: 1, unitPrice: 0 }]);
+        setModalCompanyId('');
+        setModalContactId('');
+        setModalInvoiceNumber(`ATO-2026-${String((state.invoices || []).length + 1).padStart(3, '0')}`);
+        setModalDateIssued(new Date().toISOString().split('T')[0]);
+        setModalDateDue('');
         setShowModal(true);
     };
 
@@ -68,10 +78,15 @@ export default function Invoices({ category }) {
             quantity: li.quantity || 1,
             unitPrice: li.unitPrice || 0,
         })) : [{ description: inv.description || '', quantity: 1, unitPrice: inv.amount || 0 }]);
+        setModalCompanyId(inv.companyId || '');
+        setModalContactId(inv.contactId || '');
+        setModalInvoiceNumber(inv.invoiceNumber || '');
+        setModalDateIssued(inv.dateIssued || '');
+        setModalDateDue(inv.dateDue || '');
         setShowModal(true);
     };
 
-    const handleSave = (e) => {
+    const handleSave = async (e, sendAfterSave = false) => {
         e.preventDefault();
         const fd = new FormData(e.target);
         const data = Object.fromEntries(fd);
@@ -84,11 +99,97 @@ export default function Invoices({ category }) {
         if (!data.workshopId) data.workshopId = null;
         if (!data.contactId) data.contactId = null;
         data.lineItems = lineItems.filter(li => li.description.trim());
+
         if (editItem) {
             dispatch({ type: ACTIONS.UPDATE_INVOICE, payload: { id: editItem.id, ...data } });
-        } else {
-            dispatch({ type: ACTIONS.ADD_INVOICE, payload: data });
+            setShowModal(false);
+            setEditItem(null);
+            return;
         }
+
+        // New invoice: save first as Draft
+        data.status = 'Draft';
+        dispatch({ type: ACTIONS.ADD_INVOICE, payload: data });
+
+        if (!sendAfterSave) {
+            setShowModal(false);
+            setEditItem(null);
+            return;
+        }
+
+        // Send the invoice via Outlook
+        if (!user) { alert('Not logged in.'); setShowModal(false); return; }
+
+        const { data: connection } = await supabase
+            .from('user_oauth_connections')
+            .select('id')
+            .eq('user_id', user.id)
+            .maybeSingle();
+        if (!connection) {
+            alert('Invoice saved as Draft. Please connect your Outlook account in Settings to send.');
+            navigate('/settings');
+            setShowModal(false);
+            return;
+        }
+
+        const contact = getContact(data.contactId);
+        const company = getCompany(data.companyId);
+        const recipientEmail = contact?.email || company?.email;
+        if (!recipientEmail) {
+            alert('Invoice saved as Draft. No email address found for the contact or organisation — please add one to send.');
+            setShowModal(false);
+            return;
+        }
+
+        setSending('new');
+        try {
+            const invoiceForPdf = {
+                invoiceNumber: data.invoiceNumber,
+                dateIssued: data.dateIssued,
+                dateDue: data.dateDue,
+                amount: data.amount,
+                description: data.description,
+            };
+            const { base64, filename } = generateInvoicePdf({
+                template: state.invoiceTemplate || {},
+                invoice: invoiceForPdf,
+                lineItems: data.lineItems,
+                company,
+                contact,
+            });
+
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+            const res = await fetch(`${supabaseUrl}/functions/v1/outlook-api`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: user.id,
+                    action: 'sendMail',
+                    linkedId: data.companyId,
+                    linkedType: 'company',
+                    toRecipients: [recipientEmail],
+                    subject: `Invoice ${data.invoiceNumber} from ${state.invoiceTemplate?.companyName || 'Against the Odds'}`,
+                    bodyHtml: `<p>Please find attached invoice <strong>${data.invoiceNumber}</strong>.</p><p>Amount: <strong>£${(data.amount || 0).toFixed(2)}</strong></p><p>Due: <strong>${data.dateDue ? new Date(data.dateDue).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'On receipt'}</strong></p><p>Thank you.</p>`,
+                    attachments: [{ name: filename, contentType: 'application/pdf', contentBytes: base64 }],
+                }),
+            });
+
+            if (!res.ok) throw new Error(await res.text());
+
+            // Find the invoice we just created and update its status
+            // It should be the latest one with this invoice number
+            const created = (state.invoices || []).find(i => i.invoiceNumber === data.invoiceNumber);
+            if (created) {
+                dispatch({ type: ACTIONS.UPDATE_INVOICE, payload: { id: created.id, status: 'Sent' } });
+            }
+            alert(`Invoice ${data.invoiceNumber} sent to ${recipientEmail}!`);
+        } catch (err) {
+            console.error('Send after create failed:', err);
+            alert('Invoice saved as Draft but failed to send: ' + err.message);
+        } finally {
+            setSending(null);
+        }
+
         setShowModal(false);
         setEditItem(null);
     };
@@ -303,155 +404,262 @@ export default function Invoices({ category }) {
                 </div>
             </div>
 
-            {showModal && (
-                <Modal isOpen={true} onClose={() => { setShowModal(false); setEditItem(null); }} title={editItem ? 'Edit Invoice' : 'New Invoice'} large>
-                    <form onSubmit={handleSave}>
-                        <div className="modal-body">
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">Invoice Number</label>
-                                    <input className="form-input" name="invoiceNumber" defaultValue={editItem?.invoiceNumber || `ATO-2026-${String((state.invoices || []).length + 1).padStart(3, '0')}`} required />
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">Status</label>
-                                    <select className="form-select" name="status" defaultValue={editItem?.status || 'Draft'}>
-                                        <option>Draft</option><option>Sent</option><option>Paid</option><option>Overdue</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label className="form-label">Organisation</label>
-                                    <select className="form-select" name="companyId" defaultValue={editItem?.companyId || ''} required>
-                                        <option value="">Select…</option>
-                                        {state.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                    </select>
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">Contact</label>
-                                    <select className="form-select" name="contactId" defaultValue={editItem?.contactId || ''}>
-                                        <option value="">None</option>
-                                        {(state.contacts || []).map(c => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Description</label>
-                                <input className="form-input" name="description" defaultValue={editItem?.description} placeholder="Brief summary (e.g. Workshop delivery — Feb 2026)" />
-                            </div>
+            {showModal && (() => {
+                const tpl = state.invoiceTemplate || {};
+                const accent = tpl.accentColor || '#6366f1';
+                const selectedCompany = getCompany(modalCompanyId);
+                const selectedContact = getContact(modalContactId);
+                const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
-                            {category === 'Recovery' && (
-                                <div className="form-group">
-                                    <label className="form-label">Recovery Seeker</label>
-                                    <select className="form-select" name="seekerId" defaultValue={editItem?.seekerId || ''}>
-                                        <option value="">None</option>
-                                        {(state.recoverySeekers || []).map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}
-                                    </select>
-                                </div>
-                            )}
-                            {category === 'Prevention' && (
-                                <div className="form-group">
-                                    <label className="form-label">Link to Workshop (optional)</label>
-                                    <select className="form-select" name="workshopId" defaultValue={editItem?.workshopId || ''}>
-                                        <option value="">None</option>
-                                        {(state.preventionSchedule || []).map(w => <option key={w.id} value={w.id}>{w.title}</option>)}
-                                    </select>
-                                </div>
-                            )}
+                return (
+                    <Modal isOpen={true} onClose={() => { setShowModal(false); setEditItem(null); }} title={editItem ? 'Edit Invoice' : 'New Invoice'} size="xl">
+                        <form onSubmit={handleSave}>
+                            <div className="modal-body" style={{ padding: 0 }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', minHeight: 500 }}>
 
-                            {/* Line Items */}
-                            <div style={{ marginTop: 'var(--space-md)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-sm)' }}>
-                                    <label className="form-label" style={{ margin: 0, fontWeight: 600 }}>Line Items</label>
-                                    <button type="button" className="btn btn-secondary btn-sm" onClick={addLineItem}>
-                                        <Plus size={14} /> Add Item
-                                    </button>
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
-                                    {/* Header row */}
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 90px 90px 32px', gap: 'var(--space-sm)', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, padding: '0 0 4px 0' }}>
-                                        <span>Description</span>
-                                        <span style={{ textAlign: 'center' }}>Qty</span>
-                                        <span style={{ textAlign: 'right' }}>Unit Price</span>
-                                        <span style={{ textAlign: 'right' }}>Total</span>
-                                        <span></span>
-                                    </div>
-                                    {lineItems.map((li, idx) => (
-                                        <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 90px 90px 32px', gap: 'var(--space-sm)', alignItems: 'center' }}>
-                                            <input
-                                                className="form-input"
-                                                value={li.description}
-                                                onChange={e => updateLineItem(idx, 'description', e.target.value)}
-                                                placeholder="Item description…"
-                                                style={{ fontSize: 13 }}
-                                            />
-                                            <input
-                                                className="form-input"
-                                                type="number"
-                                                min="0"
-                                                step="1"
-                                                value={li.quantity}
-                                                onChange={e => updateLineItem(idx, 'quantity', e.target.value)}
-                                                style={{ textAlign: 'center', fontSize: 13 }}
-                                            />
-                                            <input
-                                                className="form-input"
-                                                type="number"
-                                                min="0"
-                                                step="0.01"
-                                                value={li.unitPrice}
-                                                onChange={e => updateLineItem(idx, 'unitPrice', e.target.value)}
-                                                style={{ textAlign: 'right', fontSize: 13 }}
-                                            />
-                                            <div style={{ textAlign: 'right', fontWeight: 600, fontSize: 13 }}>
-                                                £{((parseFloat(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0)).toFixed(2)}
+                                    {/* LEFT — Form */}
+                                    <div style={{ padding: 'var(--space-lg)', display: 'flex', flexDirection: 'column', gap: 'var(--space-md)', overflowY: 'auto', maxHeight: '70vh' }}>
+                                        <div className="form-row">
+                                            <div className="form-group">
+                                                <label className="form-label">Invoice Number</label>
+                                                <input className="form-input" name="invoiceNumber" value={modalInvoiceNumber} onChange={e => setModalInvoiceNumber(e.target.value)} required />
                                             </div>
-                                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => removeLineItem(idx)} style={{ padding: 4 }}>
-                                                <Trash2 size={14} style={{ color: 'var(--danger)' }} />
-                                            </button>
+                                            <div className="form-group">
+                                                <label className="form-label">Status</label>
+                                                <select className="form-select" name="status" defaultValue={editItem?.status || 'Draft'}>
+                                                    <option>Draft</option><option>Sent</option><option>Paid</option><option>Overdue</option>
+                                                </select>
+                                            </div>
                                         </div>
-                                    ))}
-                                    {lineItems.length === 0 && (
-                                        <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-md)', fontSize: 13 }}>
-                                            No line items yet. Click "Add Item" to start.
+                                        <div className="form-row">
+                                            <div className="form-group">
+                                                <label className="form-label">Organisation</label>
+                                                <select className="form-select" name="companyId" value={modalCompanyId} onChange={e => setModalCompanyId(e.target.value)} required>
+                                                    <option value="">Select…</option>
+                                                    {state.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Contact</label>
+                                                <select className="form-select" name="contactId" value={modalContactId} onChange={e => setModalContactId(e.target.value)}>
+                                                    <option value="">None</option>
+                                                    {(state.contacts || []).map(c => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
+                                                </select>
+                                            </div>
                                         </div>
-                                    )}
-                                </div>
-                                {/* Total */}
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-md)', paddingTop: 'var(--space-sm)', borderTop: '1px solid var(--border)' }}>
-                                    <div style={{ display: 'flex', gap: 'var(--space-lg)', alignItems: 'center' }}>
-                                        <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Total:</span>
-                                        <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--primary)' }}>£{lineItemsTotal.toFixed(2)}</span>
+                                        <div className="form-group">
+                                            <label className="form-label">Description</label>
+                                            <input className="form-input" name="description" defaultValue={editItem?.description} placeholder="Brief summary (e.g. Workshop delivery — Feb 2026)" />
+                                        </div>
+
+                                        {category === 'Recovery' && (
+                                            <div className="form-group">
+                                                <label className="form-label">Recovery Seeker</label>
+                                                <select className="form-select" name="seekerId" defaultValue={editItem?.seekerId || ''}>
+                                                    <option value="">None</option>
+                                                    {(state.recoverySeekers || []).map(s => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}
+                                                </select>
+                                            </div>
+                                        )}
+                                        {category === 'Prevention' && (
+                                            <div className="form-group">
+                                                <label className="form-label">Link to Workshop (optional)</label>
+                                                <select className="form-select" name="workshopId" defaultValue={editItem?.workshopId || ''}>
+                                                    <option value="">None</option>
+                                                    {(state.preventionSchedule || []).map(w => <option key={w.id} value={w.id}>{w.title}</option>)}
+                                                </select>
+                                            </div>
+                                        )}
+
+                                        {/* Line Items */}
+                                        <div style={{ marginTop: 'var(--space-sm)' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-sm)' }}>
+                                                <label className="form-label" style={{ margin: 0, fontWeight: 600 }}>Line Items</label>
+                                                <button type="button" className="btn btn-secondary btn-sm" onClick={addLineItem}>
+                                                    <Plus size={14} /> Add Item
+                                                </button>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 80px 80px 28px', gap: 6, fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>
+                                                    <span>Description</span>
+                                                    <span style={{ textAlign: 'center' }}>Qty</span>
+                                                    <span style={{ textAlign: 'right' }}>Price</span>
+                                                    <span style={{ textAlign: 'right' }}>Total</span>
+                                                    <span></span>
+                                                </div>
+                                                {lineItems.map((li, idx) => (
+                                                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 80px 80px 28px', gap: 6, alignItems: 'center' }}>
+                                                        <input className="form-input" value={li.description} onChange={e => updateLineItem(idx, 'description', e.target.value)} placeholder="Item…" style={{ fontSize: 13, padding: '8px 10px' }} />
+                                                        <input className="form-input" type="number" min="0" step="1" value={li.quantity} onChange={e => updateLineItem(idx, 'quantity', e.target.value)} style={{ textAlign: 'center', fontSize: 13, padding: '8px 6px' }} />
+                                                        <input className="form-input" type="number" min="0" step="0.01" value={li.unitPrice} onChange={e => updateLineItem(idx, 'unitPrice', e.target.value)} style={{ textAlign: 'right', fontSize: 13, padding: '8px 6px' }} />
+                                                        <div style={{ textAlign: 'right', fontWeight: 600, fontSize: 13 }}>£{((parseFloat(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0)).toFixed(2)}</div>
+                                                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => removeLineItem(idx)} style={{ padding: 2 }}>
+                                                            <Trash2 size={13} style={{ color: 'var(--danger)' }} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                                {lineItems.length === 0 && (
+                                                    <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-md)', fontSize: 13 }}>No line items yet.</div>
+                                                )}
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-md)', paddingTop: 'var(--space-sm)', borderTop: '1px solid var(--border)' }}>
+                                                <div style={{ display: 'flex', gap: 'var(--space-lg)', alignItems: 'center' }}>
+                                                    <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Total:</span>
+                                                    <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--primary)' }}>£{lineItemsTotal.toFixed(2)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="form-row">
+                                            <div className="form-group">
+                                                <label className="form-label">Date Issued</label>
+                                                <DateTimePicker name="dateIssued" mode="date" value={modalDateIssued} onChange={e => setModalDateIssued(e.target.value)} />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Date Due</label>
+                                                <DateTimePicker name="dateDue" mode="date" value={modalDateDue} onChange={e => setModalDateDue(e.target.value)} />
+                                            </div>
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label">Date Paid</label>
+                                            <DateTimePicker name="datePaid" mode="date" value={editItem?.datePaid || ''} />
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label">Notes</label>
+                                            <textarea className="form-textarea" name="notes" defaultValue={editItem?.notes} style={{ minHeight: 60 }} />
+                                        </div>
+                                    </div>
+
+                                    {/* RIGHT — Live Preview */}
+                                    <div style={{ borderLeft: '1px solid var(--border)', background: 'var(--bg-elevated)', display: 'flex', flexDirection: 'column' }}>
+                                        <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--border)', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <Eye size={14} /> Live Preview
+                                        </div>
+                                        <div style={{ flex: 1, overflowY: 'auto', maxHeight: '70vh', padding: 'var(--space-md)' }}>
+                                            <div style={{
+                                                background: 'white', color: '#1a1a1a', padding: 24, fontSize: 10,
+                                                fontFamily: "'Inter', -apple-system, sans-serif", lineHeight: 1.5,
+                                                borderRadius: 'var(--radius-md)', boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                                            }}>
+                                                {/* Header */}
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, paddingBottom: 12, borderBottom: `3px solid ${accent}` }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                        {tpl.logoUrl && <img src={tpl.logoUrl} alt="" style={{ width: 36, height: 36, objectFit: 'contain' }} />}
+                                                        <div>
+                                                            {tpl.companyName && <div style={{ fontSize: 13, fontWeight: 700, color: accent }}>{tpl.companyName}</div>}
+                                                            <div style={{ whiteSpace: 'pre-line', color: '#666', fontSize: 8 }}>{tpl.companyAddress}</div>
+                                                            {tpl.companyPhone && <div style={{ color: '#666', fontSize: 8 }}>{tpl.companyPhone}</div>}
+                                                            {tpl.companyEmail && <div style={{ color: '#666', fontSize: 8 }}>{tpl.companyEmail}</div>}
+                                                            {tpl.registrationNumber && <div style={{ color: '#999', fontSize: 7 }}>{tpl.registrationNumber}</div>}
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ textAlign: 'right' }}>
+                                                        <div style={{ fontSize: 16, fontWeight: 800, color: accent, letterSpacing: 1 }}>INVOICE</div>
+                                                        <div style={{ color: '#666', fontSize: 9, marginTop: 2 }}>{modalInvoiceNumber}</div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Bill To */}
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
+                                                    <div>
+                                                        <div style={{ fontWeight: 600, fontSize: 8, textTransform: 'uppercase', color: '#999', marginBottom: 3 }}>Bill To</div>
+                                                        <div style={{ fontWeight: 600, fontSize: 10 }}>{selectedCompany?.name || '—'}</div>
+                                                        {selectedCompany?.address && <div style={{ color: '#666', fontSize: 8 }}>{selectedCompany.address}</div>}
+                                                        {selectedCompany?.city && <div style={{ color: '#666', fontSize: 8 }}>{selectedCompany.city}{selectedCompany.postcode ? `, ${selectedCompany.postcode}` : ''}</div>}
+                                                        {selectedContact && <div style={{ color: '#666', fontSize: 8, marginTop: 2 }}>Attn: {selectedContact.firstName} {selectedContact.lastName}</div>}
+                                                    </div>
+                                                    <div style={{ textAlign: 'right', fontSize: 8 }}>
+                                                        <div><span style={{ color: '#999' }}>Issued: </span>{fmtDate(modalDateIssued)}</div>
+                                                        <div><span style={{ color: '#999' }}>Due: </span>{fmtDate(modalDateDue)}</div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Table */}
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 10 }}>
+                                                    <thead>
+                                                        <tr style={{ background: accent, color: 'white' }}>
+                                                            <th style={{ padding: '4px 6px', textAlign: 'left', fontSize: 8 }}>Description</th>
+                                                            <th style={{ padding: '4px 6px', textAlign: 'center', fontSize: 8, width: 30 }}>Qty</th>
+                                                            <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: 8, width: 50 }}>Price</th>
+                                                            <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: 8, width: 50, paddingRight: 8 }}>Total</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {lineItems.filter(li => li.description.trim()).map((li, i) => (
+                                                            <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
+                                                                <td style={{ padding: '4px 6px', fontSize: 9 }}>{li.description}</td>
+                                                                <td style={{ padding: '4px 6px', textAlign: 'center', fontSize: 9 }}>{li.quantity}</td>
+                                                                <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: 9 }}>£{(parseFloat(li.unitPrice) || 0).toFixed(2)}</td>
+                                                                <td style={{ padding: '4px 6px', textAlign: 'right', fontSize: 9, fontWeight: 600, paddingRight: 8 }}>£{((parseFloat(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0)).toFixed(2)}</td>
+                                                            </tr>
+                                                        ))}
+                                                        {lineItems.filter(li => li.description.trim()).length === 0 && (
+                                                            <tr><td colSpan={4} style={{ textAlign: 'center', color: '#999', padding: 12, fontSize: 9 }}>Add line items on the left…</td></tr>
+                                                        )}
+                                                    </tbody>
+                                                </table>
+
+                                                {/* Total */}
+                                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+                                                    <div style={{ width: 140, padding: '6px 10px', background: `${accent}15`, borderRadius: 4 }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 12, color: accent }}>
+                                                            <span>Total</span>
+                                                            <span>£{lineItemsTotal.toFixed(2)}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Payment / Bank */}
+                                                {(tpl.paymentTerms || tpl.bankDetails) && (
+                                                    <div style={{ borderTop: '1px solid #eee', paddingTop: 8, marginBottom: 10 }}>
+                                                        {tpl.paymentTerms && (
+                                                            <div style={{ marginBottom: 6 }}>
+                                                                <div style={{ fontWeight: 600, fontSize: 7, textTransform: 'uppercase', color: '#999', marginBottom: 1 }}>Payment Terms</div>
+                                                                <div style={{ whiteSpace: 'pre-line', fontSize: 8, color: '#444' }}>{tpl.paymentTerms}</div>
+                                                            </div>
+                                                        )}
+                                                        {tpl.bankDetails && (
+                                                            <div>
+                                                                <div style={{ fontWeight: 600, fontSize: 7, textTransform: 'uppercase', color: '#999', marginBottom: 1 }}>Bank Details</div>
+                                                                <div style={{ whiteSpace: 'pre-line', fontSize: 8, color: '#444' }}>{tpl.bankDetails}</div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {/* Footer */}
+                                                {tpl.footerText && (
+                                                    <div style={{ textAlign: 'center', color: '#666', fontSize: 10, fontFamily: "'Unbounded', cursive", fontWeight: 500, borderTop: '1px solid #eee', paddingTop: 10 }}>
+                                                        {tpl.footerText}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-
-                            <div className="form-row" style={{ marginTop: 'var(--space-md)' }}>
-                                <div className="form-group">
-                                    <label className="form-label">Date Issued</label>
-                                    <DateTimePicker name="dateIssued" mode="date" value={editItem?.dateIssued || ''} />
-                                </div>
-                                <div className="form-group">
-                                    <label className="form-label">Date Due</label>
-                                    <DateTimePicker name="dateDue" mode="date" value={editItem?.dateDue || ''} />
-                                </div>
+                            <div className="modal-footer">
+                                <button type="button" className="btn btn-secondary" onClick={() => { setShowModal(false); setEditItem(null); }}>Cancel</button>
+                                {!editItem && (
+                                    <button type="submit" className="btn btn-secondary" onClick={() => { /* default sendAfterSave=false via form submit */ }}>Save as Draft</button>
+                                )}
+                                <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    disabled={sending === 'new'}
+                                    onClick={(e) => {
+                                        const form = e.target.closest('form') || e.target.parentElement.closest('form');
+                                        if (!form.checkValidity()) { form.reportValidity(); return; }
+                                        handleSave({ preventDefault: () => { }, target: form }, !editItem);
+                                    }}
+                                >
+                                    <Send size={16} /> {sending === 'new' ? 'Sending…' : editItem ? 'Save Changes' : 'Send Invoice'}
+                                </button>
                             </div>
-                            <div className="form-group">
-                                <label className="form-label">Date Paid</label>
-                                <DateTimePicker name="datePaid" mode="date" value={editItem?.datePaid || ''} />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Notes</label>
-                                <textarea className="form-textarea" name="notes" defaultValue={editItem?.notes} />
-                            </div>
-                        </div>
-                        <div className="modal-footer">
-                            <button type="button" className="btn btn-secondary" onClick={() => { setShowModal(false); setEditItem(null); }}>Cancel</button>
-                            <button type="submit" className="btn btn-primary">{editItem ? 'Save Changes' : 'Create Invoice'}</button>
-                        </div>
-                    </form>
-                </Modal>
-            )}
+                        </form>
+                    </Modal>
+                );
+            })()}
         </>
     );
 }
