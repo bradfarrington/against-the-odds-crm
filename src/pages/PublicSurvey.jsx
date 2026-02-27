@@ -35,7 +35,7 @@ function alpha(hex, a) {
 }
 
 /** Build a full theme object from settings */
-function buildTheme(bgColor, accentColor, cardBgColor, cardShadow) {
+function buildTheme(bgColor, accentColor, cardBgColor, cardShadow, inputBgColor, fontColor) {
     const bg = bgColor || '#1a1a2e';
     const accent = accentColor || '#FF6100';
     const lum = luminance(hexToRgb(bg));
@@ -57,18 +57,18 @@ function buildTheme(bgColor, accentColor, cardBgColor, cardShadow) {
             cardBg: card,
             cardBorder: '#2e2e42',
             cardShadow: SHADOW_MAP[cardShadow] || SHADOW_MAP.md,
-            inputBg: '#161624',
+            inputBg: inputBgColor || '#161624',
             inputBorder: '#363650',
             inputFocusBorder: accent,
-            textPrimary: '#f1f5f9',
-            textSecondary: '#94a3b8',
-            textMuted: '#64748b',
+            textPrimary: fontColor || '#f1f5f9',
+            textSecondary: fontColor || '#94a3b8',
+            textMuted: fontColor ? alpha(fontColor, 0.5) : '#64748b',
             choiceBg: '#1a1a2c',
             choiceBorder: '#2e2e42',
             choiceHoverBorder: '#4a4a66',
             choiceSelectedBg: alpha(accent, 0.15),
             choiceSelectedBorder: accent,
-            choiceSelectedText: '#f1f5f9',
+            choiceSelectedText: fontColor || '#f1f5f9',
             accent,
             accentHover: lift(accent, 25),
             accentGlow: alpha(accent, 0.18),
@@ -86,18 +86,18 @@ function buildTheme(bgColor, accentColor, cardBgColor, cardShadow) {
             cardBg: card,
             cardBorder: darken(bg, 0.08),
             cardShadow: SHADOW_MAP[cardShadow] || SHADOW_MAP.md,
-            inputBg: '#ffffff',
+            inputBg: inputBgColor || '#ffffff',
             inputBorder: '#d1d5db',
             inputFocusBorder: accent,
-            textPrimary: '#111827',
-            textSecondary: '#4b5563',
-            textMuted: '#9ca3af',
+            textPrimary: fontColor || '#111827',
+            textSecondary: fontColor || '#4b5563',
+            textMuted: fontColor ? alpha(fontColor, 0.5) : '#9ca3af',
             choiceBg: '#f9fafb',
             choiceBorder: '#e5e7eb',
             choiceHoverBorder: '#9ca3af',
             choiceSelectedBg: alpha(accent, 0.08),
             choiceSelectedBorder: accent,
-            choiceSelectedText: '#111827',
+            choiceSelectedText: fontColor || '#111827',
             accent,
             accentHover: darken(accent, 0.1),
             accentGlow: alpha(accent, 0.12),
@@ -186,6 +186,13 @@ function generateCSS(theme) {
         .ps-welcome-desc { font-size: 16px; color: ${theme.textSecondary}; margin-bottom: 32px; line-height: 1.6; }
 
         .ps-page-label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: ${theme.textMuted}; margin-bottom: 20px; }
+
+        .ps-richtext-content h1, .ps-richtext-content h2, .ps-richtext-content h3 { font-weight: 700; margin: 0 0 8px 0; }
+        .ps-richtext-content h3 { font-size: 18px; }
+        .ps-richtext-content p { margin: 0 0 8px 0; }
+        .ps-richtext-content ul, .ps-richtext-content ol { margin: 0 0 8px 0; padding-left: 24px; }
+        .ps-richtext-content li { margin-bottom: 4px; }
+        .ps-richtext-content *:last-child { margin-bottom: 0; }
     `;
 }
 
@@ -773,6 +780,32 @@ function QuestionInput({ question, value, onChange, theme }) {
         case 'section':
             return null;
 
+        case 'text_block': {
+            const { richContent } = settings;
+            if (!richContent) return null;
+            return (
+                <div
+                    className="ps-richtext-content"
+                    style={{ lineHeight: 1.6, color: theme.textPrimary }}
+                    dangerouslySetInnerHTML={{ __html: richContent }}
+                />
+            );
+        }
+
+        case 'image': {
+            const { imageUrl, altText, width, alignment } = settings;
+            if (!imageUrl) return null;
+            return (
+                <div style={{ textAlign: alignment || 'center' }}>
+                    <img
+                        src={imageUrl}
+                        alt={altText || ''}
+                        style={{ maxWidth: `${width || 100}%`, borderRadius: 8, height: 'auto' }}
+                    />
+                </div>
+            );
+        }
+
         case 'statement':
             return null;
 
@@ -793,6 +826,23 @@ function QuestionBlock({ question, value, onChange, theme }) {
                 {(description || settings.description) && (
                     <div className="ps-section-desc">{description || settings.description}</div>
                 )}
+            </div>
+        );
+    }
+
+    if (type === 'image') {
+        return (
+            <div className="ps-question">
+                <QuestionInput question={question} value={value} onChange={onChange} theme={theme} />
+                {title && <div style={{ textAlign: settings.alignment || 'center', fontSize: 13, color: theme.textMuted, marginTop: 6 }}>{title}</div>}
+            </div>
+        );
+    }
+
+    if (type === 'text_block') {
+        return (
+            <div className="ps-question">
+                <QuestionInput question={question} value={value} onChange={onChange} theme={theme} />
             </div>
         );
     }
@@ -848,7 +898,7 @@ export default function PublicSurvey() {
 
     // Build theme from survey settings
     const settings = survey?.settings || {};
-    const theme = useMemo(() => buildTheme(settings.bgColor, '#FF6100', settings.cardBgColor, settings.cardShadow), [settings.bgColor, settings.cardBgColor, settings.cardShadow]);
+    const theme = useMemo(() => buildTheme(settings.bgColor, '#FF6100', settings.cardBgColor, settings.cardShadow, settings.inputBgColor, settings.fontColor), [settings.bgColor, settings.cardBgColor, settings.cardShadow, settings.inputBgColor, settings.fontColor]);
     const css = useMemo(() => generateCSS(theme), [theme]);
     const barColor = settings.progressBarColor || '#FF6100';
     const fontFamily = settings.fontFamily || "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -930,7 +980,7 @@ export default function PublicSurvey() {
                     setError(`"${q.title || 'This field'}" — Please make a selection.`);
                     return false;
                 }
-            } else if (q.type === 'statement' || q.type === 'section') {
+            } else if (q.type === 'statement' || q.type === 'section' || q.type === 'image' || q.type === 'text_block') {
                 continue;
             } else {
                 if (!val || String(val).trim() === '') {

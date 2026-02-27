@@ -4075,6 +4075,68 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
   line-height: 1.6;
 }
 
+/* ─── Rich Text Editor ────────────────────────────────── */
+
+.sb-richtext-editor h1,
+.sb-richtext-editor h2,
+.sb-richtext-editor h3 {
+  font-weight: 700;
+  margin: 0 0 8px 0;
+}
+
+.sb-richtext-editor h3 {
+  font-size: 18px;
+}
+
+.sb-richtext-editor p {
+  margin: 0 0 8px 0;
+}
+
+.sb-richtext-editor ul,
+.sb-richtext-editor ol {
+  margin: 0 0 8px 0;
+  padding-left: 24px;
+}
+
+.sb-richtext-editor li {
+  margin-bottom: 4px;
+}
+
+.sb-richtext-editor *:last-child {
+  margin-bottom: 0;
+}
+
+/* ─── Rich Text Preview ──────────────────────────────── */
+
+.sb-preview-richtext h1,
+.sb-preview-richtext h2,
+.sb-preview-richtext h3 {
+  font-weight: 700;
+  margin: 0 0 8px 0;
+}
+
+.sb-preview-richtext h3 {
+  font-size: 18px;
+}
+
+.sb-preview-richtext p {
+  margin: 0 0 8px 0;
+}
+
+.sb-preview-richtext ul,
+.sb-preview-richtext ol {
+  margin: 0 0 8px 0;
+  padding-left: 24px;
+}
+
+.sb-preview-richtext li {
+  margin-bottom: 4px;
+}
+
+.sb-preview-richtext *:last-child {
+  margin-bottom: 0;
+}
+
 .sb-preview-nav {
   display: flex;
   align-items: center;

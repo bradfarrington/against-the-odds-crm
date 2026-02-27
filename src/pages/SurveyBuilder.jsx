@@ -2,13 +2,15 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import * as api from '../lib/api';
+import { supabase } from '../lib/supabaseClient';
 import DateTimePicker from '../components/DateTimePicker';
 import {
     ArrowLeft, Eye, EyeOff, Plus, Trash2, GripVertical,
     MessageSquare, AlignLeft, Mail, Phone, List, CheckSquare,
     ChevronDown, SlidersHorizontal, Upload, Calendar, Minus,
     FilePlus, Check, X, MousePointerClick, Save, Settings, Columns, Rows, Palette,
-    Smartphone, Monitor, User, Pipette,
+    Smartphone, Monitor, User, Pipette, ImageIcon, Type,
+    Bold, Italic, Underline, ListOrdered, Heading2,
 } from 'lucide-react';
 
 // ─── HSV ↔ Hex helpers ────────────────────────────────────────
@@ -263,6 +265,8 @@ const QUESTION_GROUPS = [
             { type: 'rating_scale', label: 'Rating Scale', icon: SlidersHorizontal },
             { type: 'file_upload', label: 'File Upload', icon: Upload },
             { type: 'date', label: 'Date', icon: Calendar },
+            { type: 'image', label: 'Image', icon: ImageIcon },
+            { type: 'text_block', label: 'Rich Text', icon: Type },
             { type: 'section', label: 'Section', icon: Minus },
             { type: 'new_page', label: 'New Page', icon: FilePlus },
         ],
@@ -279,6 +283,8 @@ const DEFAULT_SETTINGS = {
     cardBgColor: '',
     cardShadow: 'md',
     progressBarColor: '',
+    inputBgColor: '',
+    fontColor: '',
     personalInfoFields: [],
 };
 
@@ -319,6 +325,10 @@ function defaultConfig(type) {
             return { accept: '', maxSizeMB: 10 };
         case 'date':
             return { includeTime: false };
+        case 'image':
+            return { imageUrl: '', altText: '', width: '100', alignment: 'center' };
+        case 'text_block':
+            return { richContent: '' };
         case 'section':
             return { description: '' };
         default:
@@ -466,6 +476,30 @@ function QuestionCardPreview({ element }) {
                     DD / MM / YYYY
                 </div>
             );
+        case 'text_block':
+            return config.richContent ? (
+                <div
+                    style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.5 }}
+                    dangerouslySetInnerHTML={{ __html: config.richContent.length > 120 ? config.richContent.substring(0, 120) + '…' : config.richContent }}
+                />
+            ) : (
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, fontStyle: 'italic' }}>Rich text block</div>
+            );
+        case 'image':
+            return config.imageUrl ? (
+                <div style={{ marginTop: 4, textAlign: config.alignment || 'center' }}>
+                    <img
+                        src={config.imageUrl}
+                        alt={config.altText || ''}
+                        style={{ maxWidth: `${config.width || 100}%`, borderRadius: 'var(--radius-sm)', height: 'auto' }}
+                    />
+                </div>
+            ) : (
+                <div style={{ border: '2px dashed var(--border)', borderRadius: 'var(--radius-md)', padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12, marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                    <ImageIcon size={14} />
+                    No image added
+                </div>
+            );
         case 'section':
             return config.description ? (
                 <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.5 }}>{config.description}</p>
@@ -480,6 +514,7 @@ function QuestionCardPreview({ element }) {
 function EditPanel({ element, onUpdate, onDelete }) {
     const typeDef = TYPE_MAP[element.type] || {};
     const Icon = typeDef.icon || MessageSquare;
+    const [imageUploading, setImageUploading] = useState(false);
     const isChoice = ['multiple_choice', 'checkboxes', 'dropdown'].includes(element.type);
 
     function patchConfig(key, value) {
@@ -511,7 +546,7 @@ function EditPanel({ element, onUpdate, onDelete }) {
 
             <div className="sb-right-scroll">
                 {/* Label */}
-                {element.type !== 'section' && (
+                {element.type !== 'section' && element.type !== 'image' && element.type !== 'text_block' && (
                     <div className="form-group">
                         <label className="form-label">Question</label>
                         <input
@@ -533,21 +568,34 @@ function EditPanel({ element, onUpdate, onDelete }) {
                         />
                     </div>
                 )}
+                {element.type === 'image' && (
+                    <div className="form-group">
+                        <label className="form-label">Caption <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+                        <input
+                            className="form-input"
+                            value={element.label}
+                            onChange={e => onUpdate({ label: e.target.value })}
+                            placeholder="Image caption…"
+                        />
+                    </div>
+                )}
 
                 {/* Hint */}
-                <div className="form-group">
-                    <label className="form-label">Description <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
-                    <textarea
-                        className="form-textarea"
-                        value={element.hint}
-                        onChange={e => onUpdate({ hint: e.target.value })}
-                        placeholder="Add a hint or description…"
-                        style={{ minHeight: 60, fontSize: 13 }}
-                    />
-                </div>
+                {element.type !== 'image' && element.type !== 'text_block' && (
+                    <div className="form-group">
+                        <label className="form-label">Description <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+                        <textarea
+                            className="form-textarea"
+                            value={element.hint}
+                            onChange={e => onUpdate({ hint: e.target.value })}
+                            placeholder="Add a hint or description…"
+                            style={{ minHeight: 60, fontSize: 13 }}
+                        />
+                    </div>
+                )}
 
                 {/* Required toggle */}
-                {element.type !== 'section' && (
+                {element.type !== 'section' && element.type !== 'image' && element.type !== 'text_block' && (
                     <div className="sb-toggle-wrap" onClick={() => onUpdate({ required: !element.required })}>
                         <span className="sb-toggle-label">Required</span>
                         <div className={`sb-toggle${element.required ? ' on' : ''}`}>
@@ -770,6 +818,194 @@ function EditPanel({ element, onUpdate, onDelete }) {
                     </div>
                 )}
 
+                {/* Image config */}
+                {element.type === 'image' && (
+                    <>
+                        <div className="form-group">
+                            <label className="form-label">Image</label>
+                            {element.config.imageUrl && (
+                                <div style={{ marginBottom: 'var(--space-sm)', borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                                    <img
+                                        src={element.config.imageUrl}
+                                        alt={element.config.altText || ''}
+                                        style={{ width: '100%', display: 'block' }}
+                                    />
+                                </div>
+                            )}
+                            <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
+                                <label
+                                    className="btn btn-secondary btn-sm"
+                                    style={{ flex: 1, cursor: 'pointer', textAlign: 'center', opacity: imageUploading ? 0.6 : 1 }}
+                                >
+                                    <Upload size={13} />
+                                    {imageUploading ? 'Uploading…' : 'Upload image'}
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        style={{ display: 'none' }}
+                                        disabled={imageUploading}
+                                        onChange={async (e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            setImageUploading(true);
+                                            try {
+                                                const ext = file.name.split('.').pop();
+                                                const path = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
+                                                const { error } = await supabase.storage.from('survey-images').upload(path, file);
+                                                if (error) throw error;
+                                                const { data: urlData } = supabase.storage.from('survey-images').getPublicUrl(path);
+                                                patchConfig('imageUrl', urlData.publicUrl);
+                                            } catch (err) {
+                                                console.error('Image upload failed:', err);
+                                                alert(`Image upload failed: ${err.message || 'Unknown error'}`);
+                                            } finally {
+                                                setImageUploading(false);
+                                                e.target.value = '';
+                                            }
+                                        }}
+                                    />
+                                </label>
+                                {element.config.imageUrl && (
+                                    <button
+                                        className="btn btn-ghost btn-sm btn-icon"
+                                        onClick={() => patchConfig('imageUrl', '')}
+                                        title="Remove image"
+                                    >
+                                        <X size={13} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Or paste image URL</label>
+                            <input
+                                className="form-input"
+                                value={element.config.imageUrl || ''}
+                                onChange={e => patchConfig('imageUrl', e.target.value)}
+                                placeholder="https://example.com/image.jpg"
+                                style={{ fontSize: 13 }}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Alt text <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(for accessibility)</span></label>
+                            <input
+                                className="form-input"
+                                value={element.config.altText || ''}
+                                onChange={e => patchConfig('altText', e.target.value)}
+                                placeholder="Describe the image…"
+                                style={{ fontSize: 13 }}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Width ({element.config.width || 100}%)</label>
+                            <input
+                                type="range"
+                                min="25"
+                                max="100"
+                                step="5"
+                                value={element.config.width || 100}
+                                onChange={e => patchConfig('width', e.target.value)}
+                                style={{ width: '100%', accentColor: 'var(--primary)' }}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Alignment</label>
+                            <div className="sb-layout-toggle">
+                                {['left', 'center', 'right'].map(a => (
+                                    <button
+                                        key={a}
+                                        className={`sb-layout-btn${(element.config.alignment || 'center') === a ? ' active' : ''}`}
+                                        onClick={() => patchConfig('alignment', a)}
+                                        style={{ textTransform: 'capitalize' }}
+                                    >
+                                        {a}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {/* Rich Text editor */}
+                {element.type === 'text_block' && (
+                    <div className="form-group">
+                        <label className="form-label">Content</label>
+                        <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                            {/* Toolbar */}
+                            <div style={{
+                                display: 'flex', gap: 2, padding: '6px 8px',
+                                background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)',
+                                flexWrap: 'wrap',
+                            }}>
+                                {[
+                                    { cmd: 'bold', icon: <Bold size={13} />, title: 'Bold' },
+                                    { cmd: 'italic', icon: <Italic size={13} />, title: 'Italic' },
+                                    { cmd: 'underline', icon: <Underline size={13} />, title: 'Underline' },
+                                    { cmd: 'insertUnorderedList', icon: <List size={13} />, title: 'Bullet list' },
+                                    { cmd: 'insertOrderedList', icon: <ListOrdered size={13} />, title: 'Numbered list' },
+                                ].map(({ cmd, icon, title }) => (
+                                    <button
+                                        key={cmd}
+                                        type="button"
+                                        className="btn btn-ghost btn-sm btn-icon"
+                                        title={title}
+                                        style={{ width: 28, height: 28, padding: 0 }}
+                                        onMouseDown={e => {
+                                            e.preventDefault();
+                                            document.execCommand(cmd, false, null);
+                                        }}
+                                    >
+                                        {icon}
+                                    </button>
+                                ))}
+                                <div style={{ width: 1, background: 'var(--border)', margin: '0 4px', alignSelf: 'stretch' }} />
+                                <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm"
+                                    style={{ height: 28, padding: '0 8px', fontSize: 11 }}
+                                    title="Heading"
+                                    onMouseDown={e => {
+                                        e.preventDefault();
+                                        document.execCommand('formatBlock', false, '<h3>');
+                                    }}
+                                >
+                                    <Heading2 size={13} />
+                                    Heading
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm"
+                                    style={{ height: 28, padding: '0 8px', fontSize: 11 }}
+                                    title="Normal text"
+                                    onMouseDown={e => {
+                                        e.preventDefault();
+                                        document.execCommand('formatBlock', false, '<p>');
+                                    }}
+                                >
+                                    Normal
+                                </button>
+                            </div>
+                            {/* Editable area */}
+                            <div
+                                contentEditable
+                                suppressContentEditableWarning
+                                className="sb-richtext-editor"
+                                style={{
+                                    minHeight: 160, padding: '12px 14px', fontSize: 14,
+                                    lineHeight: 1.6, outline: 'none',
+                                    color: 'var(--text-primary)', background: 'var(--bg-card)',
+                                }}
+                                dangerouslySetInnerHTML={{ __html: element.config.richContent || '' }}
+                                onBlur={e => patchConfig('richContent', e.currentTarget.innerHTML)}
+                            />
+                        </div>
+                    </div>
+                )}
+
                 <div style={{ marginTop: 'auto', paddingTop: 'var(--space-md)' }}>
                     <button className="btn btn-danger btn-sm" style={{ width: '100%' }} onClick={onDelete}>
                         <Trash2 size={13} />
@@ -898,7 +1134,36 @@ function PreviewQuestion({ element, value, onChange }) {
 
     return (
         <div className="sb-preview-question">
-            {type === 'section' ? (
+            {type === 'text_block' ? (
+                config.richContent ? (
+                    <div
+                        className="sb-preview-richtext"
+                        style={{ lineHeight: 1.6 }}
+                        dangerouslySetInnerHTML={{ __html: config.richContent }}
+                    />
+                ) : (
+                    <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: 14, padding: '12px 0' }}>
+                        Rich text block — click to edit
+                    </div>
+                )
+            ) : type === 'image' ? (
+                <>
+                    {config.imageUrl ? (
+                        <div style={{ textAlign: config.alignment || 'center' }}>
+                            <img
+                                src={config.imageUrl}
+                                alt={config.altText || ''}
+                                style={{ maxWidth: `${config.width || 100}%`, borderRadius: 'var(--radius-md)', height: 'auto' }}
+                            />
+                        </div>
+                    ) : (
+                        <div style={{ border: '2px dashed var(--border)', borderRadius: 'var(--radius-md)', padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                            No image added yet
+                        </div>
+                    )}
+                    {label && <div style={{ textAlign: config.alignment || 'center', fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{label}</div>}
+                </>
+            ) : type === 'section' ? (
                 <>
                     <div className="sb-preview-section-title">{label || 'Section'}</div>
                     {(hint || config.description) && (
@@ -1055,9 +1320,35 @@ function PreviewMode({ survey, onExit }) {
     };
     const cardBgStyle = settings.cardBgColor ? { background: settings.cardBgColor } : {};
     const cardShadowStyle = settings.cardShadow ? { boxShadow: SHADOW_MAP[settings.cardShadow] || SHADOW_MAP.md } : {};
+    const fontColorStyle = settings.fontColor ? { color: settings.fontColor } : {};
+    const inputColorOverrides = (() => {
+        const s = {};
+        if (settings.inputBgColor) s['--sb-input-bg'] = settings.inputBgColor;
+        if (settings.fontColor) s['--sb-font-color'] = settings.fontColor;
+        return s;
+    })();
 
     const cardContent = (
-        <div className="sb-preview-card" style={{ ...cardBgStyle, ...cardShadowStyle }}>
+        <div className="sb-preview-card" style={{ ...cardBgStyle, ...cardShadowStyle, ...fontColorStyle, ...inputColorOverrides }}>
+            {/* Inline style overrides for inputs */}
+            {(settings.inputBgColor || settings.fontColor) && (
+                <style>{`
+                    .sb-preview-card .form-input,
+                    .sb-preview-card .form-textarea,
+                    .sb-preview-card .form-select,
+                    .sb-preview-card .sb-preview-upload-zone {
+                        ${settings.inputBgColor ? `background: ${settings.inputBgColor} !important;` : ''}
+                        ${settings.fontColor ? `color: ${settings.fontColor} !important;` : ''}
+                    }
+                    .sb-preview-card .sb-preview-q-label,
+                    .sb-preview-card .sb-preview-q-hint,
+                    .sb-preview-card .sb-preview-section-title,
+                    .sb-preview-card .sb-preview-section-desc,
+                    .sb-preview-card .sb-preview-choice {
+                        ${settings.fontColor ? `color: ${settings.fontColor} !important;` : ''}
+                    }
+                `}</style>
+            )}
             {/* Progress bar — always visible for multi-page */}
             {pages.length > 1 && (
                 <div className="sb-preview-progress-track">
@@ -1756,6 +2047,22 @@ export default function SurveyBuilder() {
                                     defaultColor="#1e1e30"
                                     onChange={val => setSurvey(s => ({ ...s, settings: { ...s.settings, cardBgColor: val } }))}
                                     onReset={() => setSurvey(s => ({ ...s, settings: { ...s.settings, cardBgColor: '' } }))}
+                                />
+
+                                <SurveyColorPicker
+                                    label="Input background"
+                                    value={survey.settings?.inputBgColor || ''}
+                                    defaultColor="#161624"
+                                    onChange={val => setSurvey(s => ({ ...s, settings: { ...s.settings, inputBgColor: val } }))}
+                                    onReset={() => setSurvey(s => ({ ...s, settings: { ...s.settings, inputBgColor: '' } }))}
+                                />
+
+                                <SurveyColorPicker
+                                    label="Font colour"
+                                    value={survey.settings?.fontColor || ''}
+                                    defaultColor="#f1f5f9"
+                                    onChange={val => setSurvey(s => ({ ...s, settings: { ...s.settings, fontColor: val } }))}
+                                    onReset={() => setSurvey(s => ({ ...s, settings: { ...s.settings, fontColor: '' } }))}
                                 />
 
                                 <div className="form-group">
