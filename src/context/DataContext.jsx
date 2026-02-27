@@ -105,6 +105,8 @@ const ACTIONS = {
     ADD_WORKSHOP_TYPE: 'ADD_WORKSHOP_TYPE',
     UPDATE_WORKSHOP_TYPE: 'UPDATE_WORKSHOP_TYPE',
     DELETE_WORKSHOP_TYPE: 'DELETE_WORKSHOP_TYPE',
+    // Invoice Template
+    SET_INVOICE_TEMPLATE: 'SET_INVOICE_TEMPLATE',
 };
 
 // ─── Initial empty state ──────────────────────────────────────
@@ -133,6 +135,7 @@ const emptyState = {
     companyIndustries: [],
     companyStatuses: [],
     workshopTypes: [],
+    invoiceTemplate: null,
 };
 
 // ─── Reducer ──────────────────────────────────────────────────
@@ -330,6 +333,9 @@ function dataReducer(state, action) {
         case ACTIONS.UPDATE_WORKSHOP_TYPE: return crudLocal(state, 'workshopTypes', { crud: 'UPDATE', payload: action.payload });
         case ACTIONS.DELETE_WORKSHOP_TYPE: return crudLocal(state, 'workshopTypes', { crud: 'DELETE', payload: action.payload });
 
+        // Invoice Template
+        case ACTIONS.SET_INVOICE_TEMPLATE: return { ...state, invoiceTemplate: action.payload };
+
         // Seeker Survey Answers
         case ACTIONS.UPDATE_SEEKER_SURVEY_ANSWERS: {
             const { seekerId, surveyId, answers: answerData } = action.payload;
@@ -484,7 +490,7 @@ export function DataProvider({ children }) {
                 invoices, targets, templates, preventionResources, recoveryResources,
                 taskCategories, surveys, workshopStages, pipelines,
                 companyTypes, companyIndustries, companyStatuses,
-                workshopTypes,
+                workshopTypes, invoiceTemplate,
             ] = await Promise.all([
                 api.fetchCompanies(),
                 api.fetchContacts(),
@@ -509,6 +515,7 @@ export function DataProvider({ children }) {
                 api.fetchCompanyIndustries(),
                 api.fetchCompanyStatuses(),
                 api.fetchWorkshopTypes(),
+                api.fetchInvoiceTemplate(),
             ]);
             rawDispatch({
                 type: ACTIONS.SET_DATA,
@@ -518,7 +525,7 @@ export function DataProvider({ children }) {
                     invoices, targets, templates, preventionResources, recoveryResources,
                     taskCategories, surveys, workshopStages, pipelines,
                     companyTypes, companyIndustries, companyStatuses,
-                    workshopTypes,
+                    workshopTypes, invoiceTemplate,
                 },
             });
         } catch (err) {

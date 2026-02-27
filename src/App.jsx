@@ -19,6 +19,7 @@ import WorkshopDetail from './pages/WorkshopDetail';
 import PreventionResources from './pages/PreventionResources';
 import RecoveryResources from './pages/RecoveryResources';
 import Invoices from './pages/Invoices';
+import InvoiceTemplateDesigner from './pages/InvoiceTemplateDesigner';
 import Projects from './pages/Projects';
 import ProjectDetail from './pages/ProjectDetail';
 import Contracts from './pages/Contracts';
@@ -94,6 +95,7 @@ function AppRoutes() {
           <Route path="contracts/:id" element={<ContractDetail />} />
           <Route path="staff-hub" element={<StaffHub />} />
           {/* Settings */}
+          <Route path="invoice-settings" element={<InvoiceTemplateDesigner />} />
           <Route path="settings" element={<Settings />} />
           {/* Legacy routes */}
           <Route path="recovery-seekers/:id" element={<SeekerDetail />} />

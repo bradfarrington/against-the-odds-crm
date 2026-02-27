@@ -278,10 +278,75 @@ export const modifyWorkshop = (id, d) => updateRow('prevention_schedule', id, d)
 export const removeWorkshop = (id) => deleteRow('prevention_schedule', id);
 
 // Invoices
-export const fetchInvoices = () => fetchAll('invoices');
-export const createInvoice = (d) => insertRow('invoices', d);
-export const modifyInvoice = (id, d) => updateRow('invoices', id, d);
+export const fetchInvoices = async () => {
+    const invoices = await fetchAll('invoices');
+    // Fetch all line items and attach to their invoices
+    let lineItems = [];
+    try {
+        const res = await supabase.from('invoice_line_items').select('*').order('sort_order', { ascending: true });
+        if (res.data) lineItems = res.data.map(toCamel);
+    } catch (e) {
+        console.warn('invoice_line_items table might not exist yet', e);
+    }
+    return invoices.map(inv => ({
+        ...inv,
+        lineItems: lineItems.filter(li => li.invoiceId === inv.id),
+    }));
+};
+export async function createInvoice(d) {
+    const { lineItems = [], ...rest } = d;
+    const invoice = await insertRow('invoices', rest);
+    if (lineItems.length) {
+        await supabase.from('invoice_line_items').insert(
+            lineItems.map((li, idx) => ({
+                invoice_id: invoice.id,
+                description: li.description || '',
+                quantity: li.quantity || 1,
+                unit_price: li.unitPrice || 0,
+                sort_order: idx,
+            }))
+        );
+    }
+    return { ...invoice, lineItems };
+}
+export async function modifyInvoice(id, d) {
+    const { lineItems, ...rest } = d;
+    const invoice = await updateRow('invoices', id, rest);
+    if (lineItems !== undefined) {
+        await supabase.from('invoice_line_items').delete().eq('invoice_id', id);
+        if (lineItems.length) {
+            await supabase.from('invoice_line_items').insert(
+                lineItems.map((li, idx) => ({
+                    invoice_id: id,
+                    description: li.description || '',
+                    quantity: li.quantity || 1,
+                    unit_price: li.unitPrice || 0,
+                    sort_order: idx,
+                }))
+            );
+        }
+    }
+    return { ...invoice, lineItems: lineItems || [] };
+}
 export const removeInvoice = (id) => deleteRow('invoices', id);
+
+// Invoice Template (org details + branding — single shared row)
+export async function fetchInvoiceTemplate() {
+    const res = await supabase.from('invoice_templates').select('*').limit(1).maybeSingle();
+    if (res.error) { console.warn('invoice_templates table might not exist yet'); return null; }
+    return res.data ? toCamel(res.data) : null;
+}
+export async function upsertInvoiceTemplate(data) {
+    const snaked = toSnake(data);
+    snaked.updated_at = new Date().toISOString();
+    if (data.id) {
+        const res = await supabase.from('invoice_templates').update(snaked).eq('id', data.id).select().single();
+        return toCamel(handleError(res));
+    } else {
+        const res = await supabase.from('invoice_templates').insert(snaked).select().single();
+        return toCamel(handleError(res));
+    }
+}
 
 // Targets
 export const fetchTargets = () => fetchAll('targets');

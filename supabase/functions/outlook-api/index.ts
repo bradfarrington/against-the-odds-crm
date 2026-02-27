@@ -10,7 +10,7 @@ serve(async (req: Request) => {
             action, userId, linkedId, linkedType, toRecipients,
             subject, bodyHtml, messageId, ccRecipients, bccRecipients,
             eventId, startDateTime, endDateTime, locationStr,
-            isAllDay, transactionId, calendarId
+            isAllDay, transactionId, calendarId, attachments
         } = payload
 
         const supabase = getSupabase()
@@ -117,8 +117,8 @@ serve(async (req: Request) => {
         }
 
         if (action === 'sendMail') {
-            if (linkedId) {
-                // Create Draft first so we can add an extension (identifies the record in CRM)
+            if (linkedId || (attachments && attachments.length > 0)) {
+                // Create Draft first so we can add extensions / attachments
                 const draftRes = await fetch('https://graph.microsoft.com/v1.0/me/messages', {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
@@ -130,8 +130,29 @@ serve(async (req: Request) => {
                 }
                 const draft = await draftRes.json()
 
-                // Add Extension to draft
-                await addExtension(draft.id, linkedId, linkedType)
+                // Add Extension to draft (only if linked to a CRM record)
+                if (linkedId) {
+                    await addExtension(draft.id, linkedId, linkedType)
+                }
+
+                // Upload attachments if provided (e.g. invoice PDF)
+                if (attachments && attachments.length > 0) {
+                    for (const att of attachments) {
+                        const attRes = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${draft.id}/attachments`, {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                '@odata.type': '#microsoft.graph.fileAttachment',
+                                name: att.name || 'attachment',
+                                contentType: att.contentType || 'application/octet-stream',
+                                contentBytes: att.contentBytes,
+                            })
+                        })
+                        if (!attRes.ok) {
+                            console.error('[outlook-api] Attachment upload failed:', await attRes.text())
+                        }
+                    }
+                }
 
                 // Send the draft
                 graphRes = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${draft.id}/send`, {
@@ -139,7 +160,7 @@ serve(async (req: Request) => {
                     headers: { 'Authorization': `Bearer ${accessToken}` }
                 })
             } else {
-                // Direct send
+                // Direct send (no attachments, no linked record)
                 graphRes = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
