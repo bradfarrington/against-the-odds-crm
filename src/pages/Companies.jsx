@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useData, ACTIONS } from '../context/DataContext';
 import { Building2, Plus, MapPin, Edit2, Trash2, Upload, X } from 'lucide-react';
 import SearchBar from '../components/SearchBar';
@@ -80,8 +80,19 @@ export default function Companies() {
     const navigate = useNavigate();
     const [search, setSearch] = useState('');
     const [showModal, setShowModal] = useState(false);
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    // Auto-open the Add Company modal if navigated with ?addCompany=1
+    useEffect(() => {
+        if (searchParams.get('addCompany')) {
+            setShowModal(true);
+            // Clean up the URL param so it doesn't persist
+            searchParams.delete('addCompany');
+            setSearchParams(searchParams, { replace: true });
+        }
+    }, []);
     const [form, setForm] = useState({
-        name: '', type: '', industry: '', city: '', postcode: '', phone: '', email: '', website: '', status: '', notes: ''
+        name: '', type: '', industry: '', city: '', postcode: '', phone: '', email: '', website: '', status: '', referral: '', notes: ''
     });
     const [logoFile, setLogoFile] = useState(null);
     const [logoPreview, setLogoPreview] = useState('');
@@ -94,6 +105,7 @@ export default function Companies() {
     const companyTypes = state.companyTypes || [];
     const companyIndustries = state.companyIndustries || [];
     const companyStatuses = state.companyStatuses || [];
+    const referralSources = state.referralSources || [];
 
     const filtered = state.companies.filter(c =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -131,7 +143,7 @@ export default function Companies() {
             name: company.name, type: company.type, industry: company.industry || '',
             city: company.city || '', postcode: company.postcode || '',
             phone: company.phone || '', email: company.email || '', website: company.website || '',
-            status: company.status, notes: company.notes || ''
+            status: company.status, referral: company.referral || '', notes: company.notes || ''
         });
         setEditLogoFile(null);
         setEditLogoPreview(company.logoUrl || '');
@@ -167,7 +179,7 @@ export default function Companies() {
             setUploading(false);
         }
         dispatch({ type: ACTIONS.ADD_COMPANY, payload: { ...form, logoUrl } });
-        setForm({ name: '', type: '', industry: '', city: '', postcode: '', phone: '', email: '', website: '', status: '', notes: '' });
+        setForm({ name: '', type: '', industry: '', city: '', postcode: '', phone: '', email: '', website: '', status: '', referral: '', notes: '' });
         setLogoFile(null);
         setLogoPreview('');
         setShowModal(false);
@@ -309,6 +321,15 @@ export default function Companies() {
                         </div>
                         <div className="form-row">
                             <div className="form-group">
+                                <label className="form-label">Referral</label>
+                                <select className="form-select" value={editForm.referral || ''} onChange={e => setEditForm(p => ({ ...p, referral: e.target.value }))}>
+                                    <option value="">Select referral…</option>
+                                    {referralSources.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="form-row">
+                            <div className="form-group">
                                 <label className="form-label">City / Town *</label>
                                 <input className="form-input" required value={editForm.city || ''} onChange={e => setEditForm(p => ({ ...p, city: e.target.value }))} />
                             </div>
@@ -381,6 +402,15 @@ export default function Companies() {
                                 <select className="form-select" required value={form.status} onChange={e => updateForm('status', e.target.value)}>
                                     <option value="">Select status…</option>
                                     {companyStatuses.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label className="form-label">Referral</label>
+                                <select className="form-select" value={form.referral} onChange={e => updateForm('referral', e.target.value)}>
+                                    <option value="">Select referral…</option>
+                                    {referralSources.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
                                 </select>
                             </div>
                         </div>

@@ -105,6 +105,14 @@ const ACTIONS = {
     ADD_WORKSHOP_TYPE: 'ADD_WORKSHOP_TYPE',
     UPDATE_WORKSHOP_TYPE: 'UPDATE_WORKSHOP_TYPE',
     DELETE_WORKSHOP_TYPE: 'DELETE_WORKSHOP_TYPE',
+    // Workshop Names (Active Workshops)
+    ADD_WORKSHOP_NAME: 'ADD_WORKSHOP_NAME',
+    UPDATE_WORKSHOP_NAME: 'UPDATE_WORKSHOP_NAME',
+    DELETE_WORKSHOP_NAME: 'DELETE_WORKSHOP_NAME',
+    // Referral Sources
+    ADD_REFERRAL_SOURCE: 'ADD_REFERRAL_SOURCE',
+    UPDATE_REFERRAL_SOURCE: 'UPDATE_REFERRAL_SOURCE',
+    DELETE_REFERRAL_SOURCE: 'DELETE_REFERRAL_SOURCE',
     // Invoice Template
     SET_INVOICE_TEMPLATE: 'SET_INVOICE_TEMPLATE',
 };
@@ -135,6 +143,8 @@ const emptyState = {
     companyIndustries: [],
     companyStatuses: [],
     workshopTypes: [],
+    workshopNames: [],
+    referralSources: [],
     invoiceTemplate: null,
 };
 
@@ -333,6 +343,16 @@ function dataReducer(state, action) {
         case ACTIONS.UPDATE_WORKSHOP_TYPE: return crudLocal(state, 'workshopTypes', { crud: 'UPDATE', payload: action.payload });
         case ACTIONS.DELETE_WORKSHOP_TYPE: return crudLocal(state, 'workshopTypes', { crud: 'DELETE', payload: action.payload });
 
+        // Workshop Names
+        case ACTIONS.ADD_WORKSHOP_NAME: return crudLocal(state, 'workshopNames', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_WORKSHOP_NAME: return crudLocal(state, 'workshopNames', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_WORKSHOP_NAME: return crudLocal(state, 'workshopNames', { crud: 'DELETE', payload: action.payload });
+
+        // Referral Sources
+        case ACTIONS.ADD_REFERRAL_SOURCE: return crudLocal(state, 'referralSources', { crud: 'ADD', payload: action.payload });
+        case ACTIONS.UPDATE_REFERRAL_SOURCE: return crudLocal(state, 'referralSources', { crud: 'UPDATE', payload: action.payload });
+        case ACTIONS.DELETE_REFERRAL_SOURCE: return crudLocal(state, 'referralSources', { crud: 'DELETE', payload: action.payload });
+
         // Invoice Template
         case ACTIONS.SET_INVOICE_TEMPLATE: return { ...state, invoiceTemplate: action.payload };
 
@@ -465,6 +485,12 @@ const apiMap = {
     [ACTIONS.ADD_WORKSHOP_TYPE]: (p) => api.createWorkshopType(p),
     [ACTIONS.UPDATE_WORKSHOP_TYPE]: (p) => api.modifyWorkshopType(p.id, p),
     [ACTIONS.DELETE_WORKSHOP_TYPE]: (p) => api.removeWorkshopType(p),
+    [ACTIONS.ADD_WORKSHOP_NAME]: (p) => api.createWorkshopName(p),
+    [ACTIONS.UPDATE_WORKSHOP_NAME]: (p) => api.modifyWorkshopName(p.id, p),
+    [ACTIONS.DELETE_WORKSHOP_NAME]: (p) => api.removeWorkshopName(p),
+    [ACTIONS.ADD_REFERRAL_SOURCE]: (p) => api.createReferralSource(p),
+    [ACTIONS.UPDATE_REFERRAL_SOURCE]: (p) => api.modifyReferralSource(p.id, p),
+    [ACTIONS.DELETE_REFERRAL_SOURCE]: (p) => api.removeReferralSource(p),
 };
 
 // ─── Provider ──────────────────────────────────────────────────
@@ -490,7 +516,7 @@ export function DataProvider({ children }) {
                 invoices, targets, templates, preventionResources, recoveryResources,
                 taskCategories, surveys, workshopStages, pipelines,
                 companyTypes, companyIndustries, companyStatuses,
-                workshopTypes, invoiceTemplate,
+                workshopTypes, workshopNames, referralSources, invoiceTemplate,
             ] = await Promise.all([
                 api.fetchCompanies(),
                 api.fetchContacts(),
@@ -515,6 +541,8 @@ export function DataProvider({ children }) {
                 api.fetchCompanyIndustries(),
                 api.fetchCompanyStatuses(),
                 api.fetchWorkshopTypes(),
+                api.fetchWorkshopNames(),
+                api.fetchReferralSources(),
                 api.fetchInvoiceTemplate(),
             ]);
             rawDispatch({
@@ -525,7 +553,7 @@ export function DataProvider({ children }) {
                     invoices, targets, templates, preventionResources, recoveryResources,
                     taskCategories, surveys, workshopStages, pipelines,
                     companyTypes, companyIndustries, companyStatuses,
-                    workshopTypes, invoiceTemplate,
+                    workshopTypes, workshopNames, referralSources, invoiceTemplate,
                 },
             });
         } catch (err) {

@@ -241,6 +241,44 @@ export default function Settings() {
                         </div>
                     </div>
 
+                    {/* Active Workshops */}
+                    <div className="card">
+                        <div className="card-header">
+                            <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                                <BookOpen size={18} /> Active Workshops
+                            </h3>
+                        </div>
+                        <div className="card-body">
+                            <LookupListManager
+                                title="Active Workshops"
+                                items={state.workshopNames || []}
+                                addAction={ACTIONS.ADD_WORKSHOP_NAME}
+                                updateAction={ACTIONS.UPDATE_WORKSHOP_NAME}
+                                deleteAction={ACTIONS.DELETE_WORKSHOP_NAME}
+                                dispatch={dispatch}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Referral Sources */}
+                    <div className="card">
+                        <div className="card-header">
+                            <h3 style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                                <Link size={18} /> Referral Sources
+                            </h3>
+                        </div>
+                        <div className="card-body">
+                            <LookupListManager
+                                title="Referral Sources"
+                                items={state.referralSources || []}
+                                addAction={ACTIONS.ADD_REFERRAL_SOURCE}
+                                updateAction={ACTIONS.UPDATE_REFERRAL_SOURCE}
+                                deleteAction={ACTIONS.DELETE_REFERRAL_SOURCE}
+                                dispatch={dispatch}
+                            />
+                        </div>
+                    </div>
+
                     {/* Appearance */}
                     <div className="card">
                         <div className="card-header"><h3>Appearance</h3></div>

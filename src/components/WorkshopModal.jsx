@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { ImagePlus, Trash2, UploadCloud, Loader2, Plus, Clock } from 'lucide-react';
@@ -9,10 +10,14 @@ import DateTimePicker from './DateTimePicker';
 export default function WorkshopModal({ isOpen, onClose, editItem, pipelineId, defaultCompanyId }) {
     const { state, dispatch, ACTIONS } = useData();
     const { user } = useAuth();
+    const navigate = useNavigate();
     const [imageUrl, setImageUrl] = useState('');
     const [uploading, setUploading] = useState(false);
     const [selectedPipelineId, setSelectedPipelineId] = useState('');
     const [newNote, setNewNote] = useState('');
+    const [startDateValue, setStartDateValue] = useState('');
+    const [selectedCompanyId, setSelectedCompanyId] = useState('');
+    const [selectedContactId, setSelectedContactId] = useState('');
     const fileInputRef = useRef(null);
 
     const staff = state.staff || [];
@@ -46,6 +51,9 @@ export default function WorkshopModal({ isOpen, onClose, editItem, pipelineId, d
             setImageUrl('');
             setSelectedPipelineId(allPipelines[0]?.id || '');
         }
+        setStartDateValue(editItem?.date ? editItem.date.slice(0, 10) : '');
+        setSelectedCompanyId(editItem?.companyId || defaultCompanyId || '');
+        setSelectedContactId(editItem?.contactId || '');
         setNewNote('');
     }, [editItem, isOpen]);
 
@@ -105,7 +113,7 @@ export default function WorkshopModal({ isOpen, onClose, editItem, pipelineId, d
         const data = Object.fromEntries(fd);
         data.attendeeCount = data.attendeeCount ? parseInt(data.attendeeCount) : null;
         data.maxCapacity = data.maxCapacity ? parseInt(data.maxCapacity) : null;
-        if (!data.companyId) data.companyId = null;
+        if (!data.companyId || data.companyId === '__ADD_NEW__') data.companyId = null;
         if (!data.contactId) data.contactId = null;
         if (!data.facilitatorId) data.facilitatorId = null;
         if (!data.value) data.value = null;
@@ -117,8 +125,9 @@ export default function WorkshopModal({ isOpen, onClose, editItem, pipelineId, d
             data.endTime = data.endDate;
             delete data.endDate;
         } else {
-            data.endTime = data.date || null;
+            data.endTime = null;
         }
+        if (!data.date) data.date = null;
 
         if (editItem) {
             dispatch({ type: ACTIONS.UPDATE_WORKSHOP, payload: { id: editItem.id, ...data } });
@@ -155,7 +164,12 @@ export default function WorkshopModal({ isOpen, onClose, editItem, pipelineId, d
                 <div className="modal-body">
                     <div className="form-group">
                         <label className="form-label">Workshop Title</label>
-                        <input className="form-input" name="title" defaultValue={editItem?.title} required />
+                        <select className="form-select" name="title" defaultValue={editItem?.title || ''} required>
+                            <option value="">Select…</option>
+                            {(state.workshopNames || []).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)).map(w => (
+                                <option key={w.id} value={w.name}>{w.name}</option>
+                            ))}
+                        </select>
                     </div>
                     {/* Pipeline selector — only shown when not opened from a specific pipeline context */}
                     {!pipelineId && allPipelines.length > 0 && (
@@ -232,16 +246,42 @@ export default function WorkshopModal({ isOpen, onClose, editItem, pipelineId, d
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">Organisation</label>
-                            <select className="form-select" name="companyId" defaultValue={editItem?.companyId || defaultCompanyId || ''}>
+                            <select
+                                className="form-select"
+                                name="companyId"
+                                value={selectedCompanyId}
+                                onChange={(e) => {
+                                    if (e.target.value === '__ADD_NEW__') {
+                                        onClose();
+                                        navigate('/companies?addCompany=1');
+                                        return;
+                                    }
+                                    setSelectedCompanyId(e.target.value);
+                                    setSelectedContactId(''); // Reset contact when company changes
+                                    // Auto-populate cover image from company logo
+                                    const selected = companies.find(c => c.id === e.target.value);
+                                    if (selected?.logoUrl && !imageUrl) {
+                                        setImageUrl(selected.logoUrl);
+                                    }
+                                }}
+                            >
                                 <option value="">Select…</option>
+                                <option value="__ADD_NEW__" style={{ fontWeight: 600 }}>＋ Add New Company…</option>
                                 {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
                         </div>
                         <div className="form-group">
                             <label className="form-label">Contact</label>
-                            <select className="form-select" name="contactId" defaultValue={editItem?.contactId || ''}>
+                            <select
+                                className="form-select"
+                                name="contactId"
+                                value={selectedContactId}
+                                onChange={(e) => setSelectedContactId(e.target.value)}
+                            >
                                 <option value="">Select…</option>
-                                {contacts.map(c => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
+                                {contacts
+                                    .filter(c => !selectedCompanyId || c.companyId === selectedCompanyId)
+                                    .map(c => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
                             </select>
                         </div>
                     </div>
@@ -261,11 +301,11 @@ export default function WorkshopModal({ isOpen, onClose, editItem, pipelineId, d
                     <div className="form-row">
                         <div className="form-group">
                             <label className="form-label">Start Date</label>
-                            <DateTimePicker name="date" mode="date" value={editStartDate} required />
+                            <DateTimePicker name="date" mode="date" value={editStartDate} onChange={(e) => setStartDateValue(e.target.value)} />
                         </div>
                         <div className="form-group">
                             <label className="form-label">End Date</label>
-                            <DateTimePicker name="endDate" mode="date" value={editEndDate} dropdownAlign="right" />
+                            <DateTimePicker name="endDate" mode="date" value={editEndDate} dropdownAlign="right" referenceDate={startDateValue} />
                         </div>
                     </div>
                     <div className="form-row">

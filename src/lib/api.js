@@ -422,6 +422,18 @@ export const createWorkshopType = (d) => insertRow('workshop_types', d);
 export const modifyWorkshopType = (id, d) => updateRow('workshop_types', id, d);
 export const removeWorkshopType = (id) => deleteRow('workshop_types', id);
 
+// Workshop Names (Active Workshops — used for title dropdown)
+export const fetchWorkshopNames = () => fetchAll('workshop_names', 'sort_order');
+export const createWorkshopName = (d) => insertRow('workshop_names', d);
+export const modifyWorkshopName = (id, d) => updateRow('workshop_names', id, d);
+export const removeWorkshopName = (id) => deleteRow('workshop_names', id);
+
+// Referral Sources
+export const fetchReferralSources = () => fetchAll('referral_sources', 'sort_order');
+export const createReferralSource = (d) => insertRow('referral_sources', d);
+export const modifyReferralSource = (id, d) => updateRow('referral_sources', id, d);
+export const removeReferralSource = (id) => deleteRow('referral_sources', id);
+
 // ─── Surveys ──────────────────────────────────────────────────
 
 export async function fetchSurveys(type) {

@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Calendar as CalendarIcon, Clock } from 'lucide-react';
 
-export default function DateTimePicker({ value, onChange, required, name, mode = 'datetime', showIcon = true, customTrigger, dropdownAlign = 'left' }) {
+export default function DateTimePicker({ value, onChange, required, name, mode = 'datetime', showIcon = true, customTrigger, dropdownAlign = 'left', referenceDate: referenceDateProp }) {
+    // Parse referenceDate prop (e.g. a start date string) into a Date object
+    const parsedRefDate = referenceDateProp ? (() => { const d = new Date(referenceDateProp); return isNaN(d.getTime()) ? null : d; })() : null;
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef(null);
     // 'days' | 'months' | 'years'
@@ -9,11 +11,15 @@ export default function DateTimePicker({ value, onChange, required, name, mode =
 
     const [internalValue, setInternalValue] = useState(value || '');
 
-    // Parse the incoming 'YYYY-MM-DDTHH:mm' string or default to today at nearest 15-min
+    // Parse the incoming 'YYYY-MM-DDTHH:mm' string or default to referenceDate/today
     const getInitialDate = () => {
         if (internalValue) {
             const d = new Date(internalValue);
             if (!isNaN(d.getTime())) return d;
+        }
+        // If no value set but a referenceDate is provided, open at that month
+        if (parsedRefDate) {
+            return new Date(parsedRefDate);
         }
         const now = new Date();
         const minutes = now.getMinutes();
@@ -150,6 +156,12 @@ export default function DateTimePicker({ value, onChange, required, name, mode =
                     for (let d = 1; d <= daysInMonth; d++) {
                         const isSelected = d === selectedDate.getDate();
                         const isToday = d === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+                        const isRefDay = parsedRefDate && d === parsedRefDate.getDate() && month === parsedRefDate.getMonth() && year === parsedRefDate.getFullYear();
+
+                        let bgColor = 'transparent';
+                        if (isSelected) bgColor = 'var(--primary)';
+                        else if (isRefDay) bgColor = 'rgba(255, 165, 60, 0.22)';
+
                         daySlots.push(
                             <button
                                 key={d}
@@ -161,15 +173,19 @@ export default function DateTimePicker({ value, onChange, required, name, mode =
                                 }}
                                 style={{
                                     padding: '6px 0', textAlign: 'center', fontSize: '13px',
-                                    fontWeight: isSelected ? '600' : '400',
-                                    color: isSelected ? 'white' : 'var(--text-primary)',
-                                    background: isSelected ? 'var(--primary)' : 'transparent',
-                                    borderRadius: 'var(--radius-sm)',
-                                    border: isToday && !isSelected ? '1px solid var(--primary-light)' : '1px solid transparent',
-                                    cursor: 'pointer', transition: 'var(--transition-fast)'
+                                    fontWeight: isSelected || isRefDay ? '600' : '400',
+                                    color: isSelected ? 'white' : isRefDay ? '#e08a1e' : 'var(--text-primary)',
+                                    background: bgColor,
+                                    borderRadius: '50%',
+                                    aspectRatio: '1',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    border: isToday && !isSelected ? '1px solid var(--primary-light)' : isRefDay && !isSelected ? '1px solid rgba(255, 165, 60, 0.45)' : '1px solid transparent',
+                                    cursor: 'pointer', transition: 'var(--transition-fast)',
+                                    position: 'relative',
                                 }}
-                                onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
-                                onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+                                onMouseEnter={(e) => { if (!isSelected && !isRefDay) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
+                                onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = isRefDay ? 'rgba(255, 165, 60, 0.22)' : 'transparent'; }}
+                                title={isRefDay ? 'Start date' : undefined}
                             >
                                 {d}
                             </button>
@@ -334,7 +350,17 @@ export default function DateTimePicker({ value, onChange, required, name, mode =
                 <button
                     type="button"
                     className="form-input"
-                    onClick={() => { setIsOpen(!isOpen); if (!isOpen) setViewMode('days'); }}
+                    onClick={() => {
+                        const opening = !isOpen;
+                        setIsOpen(opening);
+                        if (opening) {
+                            setViewMode('days');
+                            // When opening, if no value is set but referenceDate exists, navigate to that month
+                            if (!internalValue && parsedRefDate) {
+                                setSelectedDate(new Date(parsedRefDate));
+                            }
+                        }
+                    }}
                     style={{
                         display: 'flex',
                         alignItems: 'center',
