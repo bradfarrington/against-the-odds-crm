@@ -1,19 +1,22 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useData, ACTIONS } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import {
     ArrowLeft, BookOpen, Building2, User, Users, MapPin, Calendar,
     PoundSterling, Edit2, Trash2, MessageSquare, FileText, Info, Clock, Send, Plus,
-    UploadCloud, Loader2, X, Download, Check, Pencil, Receipt
+    UploadCloud, Loader2, X, Download, Check, Pencil, Receipt, QrCode, ChevronDown
 } from 'lucide-react';
 import WorkshopModal from '../components/WorkshopModal';
 import Modal from '../components/Modal';
 import StatusBadge from '../components/StatusBadge';
 import DateTimePicker from '../components/DateTimePicker';
 import { supabase } from '../lib/supabaseClient';
+import * as api from '../lib/api';
 import useTableSort from '../components/useTableSort';
 import SortableHeader from '../components/SortableHeader';
+import { QRCodeCanvas } from 'qrcode.react';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 
 export default function WorkshopDetail() {
     const { id } = useParams();
@@ -28,8 +31,16 @@ export default function WorkshopDetail() {
     const [newFeedback, setNewFeedback] = useState('');
     const [uploading, setUploading] = useState(false);
     const [dragOver, setDragOver] = useState(false);
+    const [studentFeedbackTab, setStudentFeedbackTab] = useState('post');
     const [editingNote, setEditingNote] = useState(null); // { id, text, type: 'note'|'feedback' }
     const fileInputRef = useRef(null);
+    const [showQrModal, setShowQrModal] = useState(false);
+    const [qrUrl, setQrUrl] = useState('');
+    const [generatingPdf, setGeneratingPdf] = useState(false);
+    const qrCanvasRef = useRef(null);
+    const [preEvalResponses, setPreEvalResponses] = useState([]);
+    const [preEvalLoading, setPreEvalLoading] = useState(false);
+    const [expandedPreEvalId, setExpandedPreEvalId] = useState(null);
 
     const workshop = (state.preventionSchedule || []).find(w => w.id === id);
     const companies = state.companies || [];
@@ -72,6 +83,157 @@ export default function WorkshopDetail() {
     const workshopNotes = workshop.workshopNotes || [];
 
     const fmtNoteDate = (d) => d ? new Date(d).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '') : '';
+
+    // Surveys and resources for QR code generation
+    const surveys = state.surveys || [];
+    const preventionResources = state.preventionResources || [];
+
+    // Build question label lookup from all surveys' pages
+    const questionLabelMap = {};
+    surveys.forEach(survey => {
+        (survey.pages || []).forEach(page => {
+            (page.elements || []).forEach(el => {
+                if (el.id && el.label) questionLabelMap[el.id] = el.label;
+            });
+        });
+    });
+
+    // Fetch pre-eval responses for this workshop
+    useEffect(() => {
+        if (activeTab !== 'feedback' || studentFeedbackTab !== 'pre' || !id) return;
+        let cancelled = false;
+        setPreEvalLoading(true);
+        (async () => {
+            try {
+                const preSurveys = surveys.filter(s => s.settings?.category === 'pre_workshop');
+                if (preSurveys.length === 0) { setPreEvalResponses([]); setPreEvalLoading(false); return; }
+                const allResponses = [];
+                for (const sv of preSurveys) {
+                    const responses = await api.fetchSurveyResponses(sv.id);
+                    const workshopResponses = responses.filter(r => r.workshopId === id);
+                    allResponses.push(...workshopResponses);
+                }
+                if (!cancelled) setPreEvalResponses(allResponses);
+            } catch (err) {
+                console.error('Failed to load pre-eval responses:', err);
+            } finally {
+                if (!cancelled) setPreEvalLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [activeTab, studentFeedbackTab, id, surveys.length]);
+
+    // Find an active prevention survey to use as the feedback survey
+    const feedbackSurvey = surveys.find(s => s.type === 'prevention' && s.status === 'active');
+
+    const handleGenerateQr = useCallback(() => {
+        if (!feedbackSurvey) {
+            alert('No active prevention survey found. Please create and activate a post-workshop survey first.');
+            return;
+        }
+        const params = new URLSearchParams();
+        params.set('wid', workshop.id);
+        if (workshop.facilitatorId) params.set('fid', workshop.facilitatorId);
+        const url = `${window.location.origin}/survey/${feedbackSurvey.publicToken}?${params.toString()}`;
+        setQrUrl(url);
+        setShowQrModal(true);
+    }, [feedbackSurvey, workshop]);
+
+    const handleDownloadQr = useCallback(() => {
+        const canvas = qrCanvasRef.current?.querySelector('canvas');
+        if (!canvas) return;
+        const link = document.createElement('a');
+        link.download = `qr-${workshop.title || 'workshop'}-feedback.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    }, [workshop]);
+
+    const handleDownloadPdfWithQr = useCallback(async () => {
+        if (!qrUrl) return;
+        setGeneratingPdf(true);
+        try {
+            // Find matching slide deck PDF from prevention resources
+            const matchingResource = preventionResources.find(r => {
+                const name = (r.title || r.name || '').toLowerCase();
+                const workshopTitle = (workshop.title || '').toLowerCase();
+                return name.includes(workshopTitle) || workshopTitle.includes(name);
+            });
+
+            // Get QR code as PNG
+            const canvas = qrCanvasRef.current?.querySelector('canvas');
+            if (!canvas) { setGeneratingPdf(false); return; }
+            const qrDataUrl = canvas.toDataURL('image/png');
+            const qrImageBytes = await fetch(qrDataUrl).then(r => r.arrayBuffer());
+
+            let pdfDoc;
+
+            if (matchingResource?.fileUrl) {
+                // Download the existing PDF and add QR to it
+                try {
+                    const pdfBytes = await fetch(matchingResource.fileUrl).then(r => r.arrayBuffer());
+                    pdfDoc = await PDFDocument.load(pdfBytes);
+                } catch {
+                    // If we can't load the PDF, create a new one
+                    pdfDoc = await PDFDocument.create();
+                }
+            } else {
+                // No matching PDF found — create a fresh one
+                pdfDoc = await PDFDocument.create();
+            }
+
+            // Add a new page with the QR code
+            const page = pdfDoc.addPage([595.28, 841.89]); // A4
+            const qrImage = await pdfDoc.embedPng(qrImageBytes);
+            const qrSize = 250;
+            const pageWidth = page.getWidth();
+            const pageHeight = page.getHeight();
+
+            // Center the QR code
+            page.drawImage(qrImage, {
+                x: (pageWidth - qrSize) / 2,
+                y: pageHeight / 2 - qrSize / 2 + 40,
+                width: qrSize,
+                height: qrSize,
+            });
+
+            // Add title text above QR
+            const { rgb } = await import('pdf-lib');
+            const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+            const titleText = 'Scan to give your feedback';
+            const titleWidth = font.widthOfTextAtSize(titleText, 24);
+            page.drawText(titleText, {
+                x: (pageWidth - titleWidth) / 2,
+                y: pageHeight / 2 + qrSize / 2 + 80,
+                size: 24,
+                font,
+                color: rgb(0.1, 0.1, 0.1),
+            });
+
+            // Add workshop name below title
+            const subText = workshop.title || 'Workshop';
+            const subWidth = font.widthOfTextAtSize(subText, 16);
+            page.drawText(subText, {
+                x: (pageWidth - subWidth) / 2,
+                y: pageHeight / 2 + qrSize / 2 + 50,
+                size: 16,
+                font,
+                color: rgb(0.3, 0.3, 0.3),
+            });
+
+            const pdfOutputBytes = await pdfDoc.save();
+            const blob = new Blob([pdfOutputBytes], { type: 'application/pdf' });
+            const link = document.createElement('a');
+            link.download = `${workshop.title || 'workshop'}-feedback-slides.pdf`;
+            link.href = URL.createObjectURL(blob);
+            link.click();
+            URL.revokeObjectURL(link.href);
+        } catch (err) {
+            console.error('PDF generation failed:', err);
+            alert('Failed to generate PDF. You can download the QR image instead.');
+        } finally {
+            setGeneratingPdf(false);
+        }
+    }, [qrUrl, preventionResources, workshop]);
 
     const handleAddNote = () => {
         if (!newNote.trim()) return;
@@ -194,6 +356,9 @@ export default function WorkshopDetail() {
                     </div>
                 </div>
                 <div className="page-header-actions">
+                    <button className="btn btn-primary" onClick={handleGenerateQr}>
+                        <QrCode size={15} /> Generate QR
+                    </button>
                     <button className="btn btn-secondary" onClick={() => setShowEditModal(true)}>
                         <Edit2 size={15} /> Edit
                     </button>
@@ -740,12 +905,183 @@ export default function WorkshopDetail() {
                                     <Users size={18} /> Student Feedback
                                 </h3>
                             </div>
-                            <div className="card-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                                <div className="empty-state" style={{ padding: 'var(--space-xl)' }}>
-                                    <Users />
-                                    <h3>Coming Soon</h3>
-                                    <p>Student feedback will appear here</p>
+                            <div className="card-body" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                {/* Sub-tabs */}
+                                <div style={{ display: 'flex', gap: 'var(--space-xs)', marginBottom: 'var(--space-lg)', borderBottom: '1px solid var(--border)', paddingBottom: 'var(--space-sm)' }}>
+                                    <button
+                                        className={`btn btn-sm ${studentFeedbackTab === 'pre' ? 'btn-primary' : 'btn-ghost'}`}
+                                        onClick={() => setStudentFeedbackTab('pre')}
+                                        style={{ fontSize: 12, padding: '4px 12px' }}
+                                    >
+                                        Pre Evaluation
+                                    </button>
+                                    <button
+                                        className={`btn btn-sm ${studentFeedbackTab === 'post' ? 'btn-primary' : 'btn-ghost'}`}
+                                        onClick={() => setStudentFeedbackTab('post')}
+                                        style={{ fontSize: 12, padding: '4px 12px' }}
+                                    >
+                                        Post Session
+                                    </button>
                                 </div>
+
+                                {/* Pre Evaluation content */}
+                                {studentFeedbackTab === 'pre' && (
+                                    preEvalLoading ? (
+                                        <div style={{ padding: 'var(--space-xl)', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                            <Loader2 className="spin" style={{ width: 24, height: 24, marginBottom: 8 }} />
+                                            <p>Loading responses…</p>
+                                        </div>
+                                    ) : preEvalResponses.length === 0 ? (
+                                        <div className="empty-state" style={{ padding: 'var(--space-xl)', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                                            <Users />
+                                            <h3>Pre Evaluation</h3>
+                                            <p>No pre-workshop evaluation responses yet for this workshop</p>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <div style={{ marginBottom: 'var(--space-md)', fontSize: 13, color: 'var(--text-muted)' }}>
+                                                <strong style={{ color: 'var(--text-primary)' }}>{preEvalResponses.length}</strong> response{preEvalResponses.length !== 1 ? 's' : ''} received
+                                            </div>
+
+                                            {/* Yes/No Summary Boxes */}
+                                            {(() => {
+                                                const ADVERT_Q = '10000001-0001-0001-0001-000000000019';
+                                                const NORMAL_Q = '10000001-0001-0001-0001-000000000020';
+                                                const countYesNo = (qId) => {
+                                                    let yes = 0, no = 0;
+                                                    preEvalResponses.forEach(r => {
+                                                        const ans = (r.answers || []).find(a => a.questionId === qId);
+                                                        if (ans) {
+                                                            if (ans.value === 'Yes') yes++;
+                                                            else if (ans.value === 'No') no++;
+                                                        }
+                                                    });
+                                                    return { yes, no, total: yes + no };
+                                                };
+                                                const advert = countYesNo(ADVERT_Q);
+                                                const normal = countYesNo(NORMAL_Q);
+
+                                                const SummaryBox = ({ title, data }) => (
+                                                    <div style={{
+                                                        background: 'var(--bg-surface)',
+                                                        border: '1px solid var(--border)',
+                                                        borderRadius: 'var(--radius-lg)',
+                                                        padding: 'var(--space-lg)',
+                                                        flex: 1,
+                                                        minWidth: 250,
+                                                    }}>
+                                                        <h4 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 'var(--space-md)', lineHeight: 1.4 }}>{title}</h4>
+                                                        <div style={{ display: 'flex', gap: 'var(--space-lg)', marginBottom: 'var(--space-sm)' }}>
+                                                            <div style={{ flex: 1, textAlign: 'center' }}>
+                                                                <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--success)' }}>{data.yes}</div>
+                                                                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Yes</div>
+                                                            </div>
+                                                            <div style={{ width: 1, background: 'var(--border)' }} />
+                                                            <div style={{ flex: 1, textAlign: 'center' }}>
+                                                                <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--danger)' }}>{data.no}</div>
+                                                                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>No</div>
+                                                            </div>
+                                                        </div>
+                                                        {data.total > 0 && (
+                                                            <div style={{ height: 6, borderRadius: 3, background: 'var(--bg-elevated)', overflow: 'hidden', marginTop: 'var(--space-sm)' }}>
+                                                                <div style={{
+                                                                    height: '100%',
+                                                                    width: `${(data.yes / data.total) * 100}%`,
+                                                                    background: 'var(--success)',
+                                                                    borderRadius: 3,
+                                                                    transition: 'width 0.3s ease',
+                                                                }} />
+                                                            </div>
+                                                        )}
+                                                        <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', marginTop: 4 }}>
+                                                            {data.total} response{data.total !== 1 ? 's' : ''}
+                                                        </div>
+                                                    </div>
+                                                );
+
+                                                return (
+                                                    <div style={{ display: 'flex', gap: 'var(--space-lg)', marginBottom: 'var(--space-xl)', flexWrap: 'wrap' }}>
+                                                        <SummaryBox title="Do you think gambling should be advertised after 9pm?" data={advert} />
+                                                        <SummaryBox title="Do you think gambling has become normalised?" data={normal} />
+                                                    </div>
+                                                );
+                                            })()}
+
+                                            <div className="data-table-wrapper">
+                                                <table className="data-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th style={{ width: 50 }}>#</th>
+                                                            <th>Submitted</th>
+                                                            <th>Answers</th>
+                                                            <th style={{ width: 40 }}></th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {preEvalResponses.map((r, idx) => {
+                                                            const isExpanded = expandedPreEvalId === r.id;
+                                                            return (
+                                                                <React.Fragment key={r.id}>
+                                                                    <tr
+                                                                        onClick={() => setExpandedPreEvalId(isExpanded ? null : r.id)}
+                                                                        style={{ cursor: 'pointer' }}
+                                                                        className={isExpanded ? 'row-active' : ''}
+                                                                    >
+                                                                        <td className="table-cell-secondary">{idx + 1}</td>
+                                                                        <td className="table-cell-secondary">
+                                                                            {r.submittedAt ? new Date(r.submittedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                                                                        </td>
+                                                                        <td className="table-cell-secondary">{r.answers?.length || 0}</td>
+                                                                        <td>
+                                                                            <ChevronDown style={{ width: 14, height: 14, transition: 'transform 0.2s', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)' }} />
+                                                                        </td>
+                                                                    </tr>
+                                                                    {isExpanded && (
+                                                                        <tr>
+                                                                            <td colSpan={4} style={{ padding: 0, borderTop: 'none' }}>
+                                                                                <div style={{
+                                                                                    background: 'var(--bg-surface)',
+                                                                                    padding: 'var(--space-lg) var(--space-xl)',
+                                                                                    borderTop: '1px solid var(--border-subtle)',
+                                                                                    borderBottom: '1px solid var(--border-subtle)',
+                                                                                }}>
+                                                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md) var(--space-2xl)', fontSize: 13 }}>
+                                                                                        {(r.answers || []).map(a => (
+                                                                                            <div key={a.id || a.questionId} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                                                                                <span style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                                                                    {questionLabelMap[a.questionId] || 'Unknown Question'}
+                                                                                                </span>
+                                                                                                <span style={{ color: 'var(--text-primary)' }}>
+                                                                                                    {a.value === true ? 'Yes' : a.value === false ? 'No' : String(a.value || '—')}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                    {(!r.answers || r.answers.length === 0) && (
+                                                                                        <p style={{ color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>No answers recorded</p>
+                                                                                    )}
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    )}
+                                                                </React.Fragment>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )
+                                )}
+
+                                {/* Post Session content */}
+                                {studentFeedbackTab === 'post' && (
+                                    <div className="empty-state" style={{ padding: 'var(--space-xl)', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                                        <Users />
+                                        <h3>Post Session</h3>
+                                        <p>Post-workshop session feedback will appear here</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -828,7 +1164,7 @@ export default function WorkshopDetail() {
                         </div>
                     </div>
                 )}
-            </div>
+            </div >
 
             <Modal isOpen={showInvoiceModal} onClose={() => setShowInvoiceModal(false)} title="New Invoice">
                 <form onSubmit={(e) => {
@@ -921,6 +1257,51 @@ export default function WorkshopDetail() {
                 editItem={workshop}
                 pipelineId={workshop.pipelineId}
             />
+
+            {/* QR Code Modal */}
+            <Modal isOpen={showQrModal} onClose={() => setShowQrModal(false)} title="Feedback QR Code">
+                <div className="modal-body" style={{ textAlign: 'center', padding: 'var(--space-xl)' }}>
+                    <h3 style={{ marginBottom: 'var(--space-sm)', fontSize: 18 }}>{workshop.title}</h3>
+                    {facilitator && (
+                        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 'var(--space-lg)' }}>
+                            Facilitated by {facilitator.firstName} {facilitator.lastName}
+                        </p>
+                    )}
+
+                    {qrUrl && (
+                        <div ref={qrCanvasRef} style={{ display: 'inline-block', padding: 'var(--space-lg)', background: '#fff', borderRadius: 'var(--radius-lg)', marginBottom: 'var(--space-lg)' }}>
+                            <QRCodeCanvas value={qrUrl} size={250} level="H" includeMargin />
+                        </div>
+                    )}
+
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 'var(--space-lg)', wordBreak: 'break-all', maxWidth: 400, margin: '0 auto var(--space-lg)' }}>
+                        {qrUrl}
+                    </p>
+
+                    <div style={{ display: 'flex', gap: 'var(--space-sm)', justifyContent: 'center', flexWrap: 'wrap' }}>
+                        <button className="btn btn-secondary" onClick={handleDownloadQr}>
+                            <Download size={14} /> Download QR Image
+                        </button>
+                        <button className="btn btn-primary" onClick={handleDownloadPdfWithQr} disabled={generatingPdf}>
+                            {generatingPdf ? (
+                                <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Generating…</>
+                            ) : (
+                                <><Download size={14} /> Download PDF with QR</>
+                            )}
+                        </button>
+                    </div>
+
+                    {preventionResources.some(r => {
+                        const name = (r.title || r.name || '').toLowerCase();
+                        const wt = (workshop.title || '').toLowerCase();
+                        return name.includes(wt) || wt.includes(name);
+                    }) && (
+                            <p style={{ fontSize: 11, color: 'var(--success)', marginTop: 'var(--space-md)' }}>
+                                ✓ Matching slide deck found — QR will be appended to those slides
+                            </p>
+                        )}
+                </div>
+            </Modal>
         </>
     );
 }

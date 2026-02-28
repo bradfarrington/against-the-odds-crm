@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import * as api from '../lib/api';
 import { ChevronRight, Check, Calendar as CalendarIcon } from 'lucide-react';
 
@@ -863,6 +863,9 @@ function QuestionBlock({ question, value, onChange, theme }) {
 
 export default function PublicSurvey() {
     const { token } = useParams();
+    const [searchParams] = useSearchParams();
+    const workshopId = searchParams.get('wid') || null;
+    const facilitatorId = searchParams.get('fid') || null;
 
     const [loadState, setLoadState] = useState('loading');
     const [survey, setSurvey] = useState(null);
@@ -1017,7 +1020,7 @@ export default function PublicSurvey() {
                 });
                 await api.submitRecoverySurveyResponse(survey.id, personalInfo, customAnswers, answersArray, metadata);
             } else {
-                await api.submitPublicSurveyResponse(survey.id, answersArray, metadata);
+                await api.submitPublicSurveyResponse(survey.id, answersArray, metadata, workshopId, facilitatorId);
             }
             setCurrentPage(totalPages); // advance to thank you
         } catch (err) {

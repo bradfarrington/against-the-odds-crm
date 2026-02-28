@@ -11,3 +11,6 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Expose for console scripts
+if (typeof window !== 'undefined') window.__supabase = supabase;

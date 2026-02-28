@@ -503,6 +503,17 @@ export async function fetchSurveyResponses(surveyId) {
     }));
 }
 
+export async function fetchAllSurveyResponses() {
+    const res = await supabase
+        .from('survey_responses')
+        .select('*, survey_answers(*)')
+        .order('submitted_at', { ascending: false });
+    return handleError(res).map(row => ({
+        ...toCamel(row),
+        answers: (row.survey_answers || []).map(toCamel),
+    }));
+}
+
 export const createSurveyResponse = (d) => insertRow('survey_responses', d);
 
 export async function submitSurveyAnswers(responseId, answers) {
@@ -533,10 +544,13 @@ export async function fetchPublicSurvey(token) {
     return { survey, questions };
 }
 
-export async function submitPublicSurveyResponse(surveyId, answers, metadata = {}) {
+export async function submitPublicSurveyResponse(surveyId, answers, metadata = {}, workshopId = null, facilitatorId = null) {
+    const insertData = { survey_id: surveyId, respondent_type: 'external', metadata };
+    if (workshopId) insertData.workshop_id = workshopId;
+    if (facilitatorId) insertData.facilitator_id = facilitatorId;
     const responseRes = await supabase
         .from('survey_responses')
-        .insert({ survey_id: surveyId, respondent_type: 'external', metadata })
+        .insert(insertData)
         .select()
         .single();
     if (responseRes.error) throw new Error(responseRes.error.message);
